@@ -3,8 +3,9 @@
          racket/contract/base
          racket/match
          "conversion.rkt"
+         "json-util.rkt"
          "lsp.rkt"
-         "json-util.rkt")
+         "racket.rkt")
 
 ;; DidOpenTextDocumentParams
 (define-json-expander DidOpenTextDocumentParams
@@ -16,7 +17,10 @@
      #:textDocument (TextDocumentItem #:uri uri
                                       #:text text))
     params)
-  (send ws add-doc uri text))
+  (send ws add-doc uri text)
+
+  ;; Send colorize notification
+  (racket/colorize ws uri))
 
 ;; DidCloseTextDocumentParams
 (define-json-expander DidCloseTextDocumentParams
@@ -57,6 +61,9 @@
        (define end-pos (+ st-pos range-ln))
        (send ws update-doc uri text st-pos end-pos)]
       [(TextDocumentContentChangeEvent #:text text)
-       (send ws replace-doc uri text)])))
+       (send ws replace-doc uri text)]))
+
+  ;; Send colorize notification
+  (racket/colorize ws uri))
 
 (provide (all-defined-out))
