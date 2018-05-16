@@ -62,8 +62,11 @@
 
     (define/public (get-doc-trace uri)
       (match (get-doc uri)
-        [(document _ doc-trace worker)
-         (receive-check-syntax worker doc-trace)]
+        [(document doc-text doc-trace worker)
+         (define new-doc-trace (receive-check-syntax worker doc-trace))
+         (hash-set! docs (string->symbol uri)
+                    (document doc-text new-doc-trace worker))
+         new-doc-trace]
         [_ #f]))
 
     (define/public (open-doc-text uri)

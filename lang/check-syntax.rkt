@@ -12,10 +12,11 @@
 (struct warning (code msg srclocs))
 
 (define (exn->exception e)
-  ;(define-values (code _ _ _ _ _ _ _) (struct-type-info e))
+  (match-define-values (struct-type _) (struct-info e))
+  (match-define-values (code _ _ _ _ _ _ _) (struct-type-info struct-type))
   (define msg (exn-message e))
   (define srclocs ((exn:srclocs-accessor e) e))
-  (exception ("exn" msg srclocs)))
+  (exception code msg srclocs))
 
 (define build-trace%
   (class (annotations-mixin object%)
@@ -108,7 +109,7 @@
       (void))
 
     (define/override (syncheck:add-definition-target
-                      source-obj start end style-name)
+                      source-obj start end style-name mode)
       ;; TODO
       (void))
 
@@ -119,6 +120,9 @@
       (void))
 
     ))
+
+(define ((report-error trace) exn)
+  (send trace add-error (exn->exception exn)))
 
 (define (check-syntax path text)
   (define ns (make-base-namespace))
@@ -132,9 +136,7 @@
   (parameterize ([current-annotations trace]
                  [current-namespace ns]
                  [current-load-relative-directory src-dir])
-    (with-handlers ([exn?
-                     (lambda (e)
-                       (send trace add-error (exn->exception e)))])
+    (with-handlers ([exn? (report-error trace)])
       (define stx (with-module-reading-parameterization
                     (λ () (read-syntax text in))))
       (add-syntax (expand stx)))
@@ -146,6 +148,7 @@
   (define (work msg)
     (check-syntax path msg))
   (define worker (start-worker work))
+  (send-check-syntax worker text)
   worker)
 
 (define (send-check-syntax worker text)
