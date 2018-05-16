@@ -2,7 +2,7 @@
 (require racket/class
          "lang/workspace.rkt"
          "protocol/jsonrpc.rkt"
-         "protocol/methods.rkt")
+         "protocol/dispatch.rkt")
 
 (define (main-loop [ws (new workspace%)])
   (define message (read-message))

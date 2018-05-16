@@ -24,4 +24,26 @@
                 (syntax/loc stx
                   (make-hasheq (list (cons 'key key_) ...)))])))))]))
 
+(module+ test
+  (require rackunit)
+
+  (define-json-expander greeting
+    [hello string?]
+    [who string?])
+
+  (define hello_world (greeting #:hello "hello" #:who "world"))
+  (check-equal? (match hello_world
+                  [(greeting #:hello hello) hello])
+                "hello")
+  (check-equal? (match hello_world
+                  [(greeting #:who who) who])
+                "world")
+
+  ;; No support for constructing partial elements
+  #;(define hello (greeting #:hello "hello"))
+  #;(check-equal? (match hello
+                  [(greeting #:hello hello) hello])
+                "hello")
+  )
+
 (provide define-json-expander)

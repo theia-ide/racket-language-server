@@ -1,6 +1,7 @@
 #lang racket/base
-(require racket/list
-         racket/contract/base
+(require racket/contract/base
+         racket/function
+         racket/list
          "json-util.rkt")
 
 ;; Position
@@ -137,5 +138,82 @@
 (define-json-expander MarkupContent
   [kind string?]
   [value string?])
+
+;; InitializeParams
+(define-json-expander InitializeParams
+  [processId (or/c exact-nonnegative-integer? ((curry eq?) 'null))]
+  [rootUri string?]
+  [initializationOptions any/c]
+  [capabilities any/c]
+  [trace string?]
+  [workspaceFolders (or/c list? ((curry eq?) 'null))])
+
+(define-json-expander ClientCapabilities
+  [workspace any/c]
+  [textDocument any/c]
+  [experimental any/c])
+
+;; InitializeResult
+(define-json-expander InitializeResult
+  [capabilities any/c])
+
+(define-json-expander ServerCapabilities
+  [textDocumentSync any/c]
+  [hoverProvider boolean?]
+  [completionProvider any/c]
+  [signatureHelpProvider any/c]
+  [definitionProvider boolean?]
+  [typeDefinitionProvider boolean?]
+  [implementationProvider boolean?]
+  [referencesProvider boolean?]
+  [documentHighlightProvider boolean?]
+  [documentSymbolProvider boolean?]
+  [workspaceSymbolProvider boolean?]
+  [codeActionProvider boolean?]
+  [codeLensProvider any/c]
+  [documentFormattingProvider boolean?]
+  [documentRangeFormattingProvider boolean?]
+  [documentOnTypeFormattingProvider any/c]
+  [renameProvider boolean?]
+  [documentLinkProvider any/c]
+  [colorProvider boolean?]
+  [executeCommandProvider any/c]
+  [workspace any/c]
+  [experimental any/c])
+
+(define-json-expander TextDocumentSyncOptions
+  [openClose boolean?]
+  [change exact-nonnegative-integer?]
+  [willSave boolean?]
+  [willSaveWaitUntil boolean?]
+  [save any/c])
+
+(define TextDocumentSyncKindNone 0)
+(define TextDocumentSyncKindFull 1)
+(define TextDocumentSyncKindIncremental 2)
+
+;; DidOpenTextDocumentParams
+(define-json-expander DidOpenTextDocumentParams
+  [textDocument any/c])
+
+;; DidCloseTextDocumentParams
+(define-json-expander DidCloseTextDocumentParams
+  [textDocument any/c])
+
+;; DidChangeTextDocumentParams
+(define-json-expander DidChangeTextDocumentParams
+  [textDocument any/c]
+  [contentChanges list?])
+
+;; TextDocumentContentChangeEvent
+(define-json-expander TextDocumentContentChangeEvent
+  [range any/c]
+  [rangeLength exact-nonnegative-integer?]
+  [text string?])
+
+;; Hover
+(define-json-expander Hover
+  [contents string?]
+  [range any/c])
 
 (provide (all-defined-out))

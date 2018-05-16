@@ -1,7 +1,9 @@
 #lang racket/base
-(require racket/match
+(require racket/contract/base
+         racket/match
          racket/port
-         json)
+         json
+         "json-util.rkt")
 
 ;; Defined by JSON RPC
 (define PARSE-ERROR -32700)
@@ -34,13 +36,19 @@
   (write-json msg out)
   (flush-output out))
 
-;; Constructor for a notification
+;; Send a notification
 (define (send-notification method params)
   (define notification
     (hasheq 'jsonrpc "2.0"
             'method method
             'params params))
   (write-message notification))
+
+(define-json-expander JsonRpcMessage
+  [jsonrpc string?]
+  [id (or/c number? string?)]
+  [method string?]
+  [params any/c])
 
 ;; Constructor for a response object representing success.
 (define (success-response id result)
