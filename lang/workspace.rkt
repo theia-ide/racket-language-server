@@ -70,6 +70,11 @@
       (define doc-text (get-doc-text uri))
       (if doc-text (send doc-text get-text) #f))
 
+    (define/public (open-doc uri)
+      (define doc-text (get-doc-text uri))
+      (define doc-trace (get-doc-trace uri))
+      (values doc-text doc-trace))
+
   ))
 
 (module+ test

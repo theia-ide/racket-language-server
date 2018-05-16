@@ -41,6 +41,8 @@
       (set! warnings (cons warn warnings))
       (void))
 
+    (define/public (get-hovers) hovers)
+
     (define/override (syncheck:find-source-object stx)
       ;; Skip annotations if source-object if it's source location is
       ;; from a different file.
