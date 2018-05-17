@@ -29,13 +29,44 @@
       (list symbol 'symbol #f (add1 end-white) end 'lang))]
     [_ #f]))
 
+(define (skip proc next-token)
+  (define (new-next-token)
+    (define token (next-token))
+    (if (proc token) (new-next-token) token))
+  new-next-token)
 
 ;; Counts parenthesis and reclassifies the tokens of the sexp after
 ;; 'sexp-comment to 'comment.
+(define (sexp-comment-handler)
+  (define (is-open paren)
+    (or (eq? paren '|(|) (eq? paren '|{|) (eq? paren '|[|)))
+  (define state 0)
+  (define (is-comment type paren)
+    (cond
+      [(eq? type 'sexp-comment)
+       (set! state 1)]
+
+      [(and (eq? state 1) (eq? type 'symbol))
+       (set! state -1)]
+
+      [(and (> state 0) (eq? type 'parenthesis))
+       (set! state (if (is-open paren)
+                       (add1 state)
+                       (sub1 state)))
+       (when (eq? state 1)
+         (set! state -1))]
+
+      [(eq? state -1)
+       (set! state 0)])
+
+    (if (eq? state 0) #f #t))
+  is-comment)
+
 (define (get-lexer in)
   (define offset 0)
   (define mode #f)
   (define lang-tokens #f)
+  (define is-comment (sexp-comment-handler))
   (define (next-token)
     (define (default-next-token)
       (match-define-values
@@ -47,10 +78,13 @@
       ;; Normalize whitespace naming
       (define newType (if (eq? type 'whitespace) 'white-space type))
 
+      ;; Reclassify tokens after 'sexp-comment
+      (define newType* (if (is-comment type data) 'comment newType))
+
       (define token
         (if (eof-object? lexeme)
             eof
-            (list lexeme newType data start end (mode->symbol mode))))
+            (list lexeme newType* data start end (mode->symbol mode))))
 
       ;; Splits 'other tokens starting with #lang into a 'lang-keyword
       ;; and 'lang-symbol token.
