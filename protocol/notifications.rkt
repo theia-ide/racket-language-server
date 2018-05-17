@@ -29,8 +29,9 @@
   (define next-token (make-tokenizer text))
   (define tokens
     (for/list ([token (in-producer next-token eof-object?)])
-      (match-define (list text type paren? start end) token)
+      (match-define (list text type paren? start end mode) token)
       (hasheq 'kind (symbol->string type)
+              'mode (symbol->string mode)
               'range (pos/pos->Range doc-text (sub1 start) (sub1 end)))))
 
   (send-notification "racket/colorize"
