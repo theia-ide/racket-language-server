@@ -147,17 +147,8 @@
 (define (start-check-syntax path text)
   (define (work msg)
     (check-syntax path msg))
-  (define worker (start-worker work))
-  (send-check-syntax worker text)
-  worker)
-
-(define (send-check-syntax worker text)
-  (thread-send worker text))
-
-(define (receive-check-syntax worker trace)
-  (empty-queue (if trace trace (thread-receive))))
-
-(define (kill-check-syntax worker)
-  (kill-thread worker))
+  (define w (make-worker work))
+  (worker-send w text)
+  w)
 
 (provide (all-defined-out))

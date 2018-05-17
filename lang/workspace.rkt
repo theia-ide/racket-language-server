@@ -3,7 +3,8 @@
          racket/match
          racket/string
          framework
-         "check-syntax.rkt")
+         "check-syntax.rkt"
+         "worker.rkt")
 
 (struct document (text trace worker))
 
@@ -33,7 +34,7 @@
     (define/public (remove-doc uri)
       (match (get-doc uri)
         [(document _ _ worker)
-         (kill-check-syntax worker)
+         (kill-worker worker)
          (hash-remove! docs (string->symbol uri))]
         [_ #f]))
 
@@ -43,7 +44,7 @@
          (send doc-text insert text start end)
 
          (define text (send doc-text get-text))
-         (send-check-syntax worker text)]
+         (worker-send worker text)]
         [_ #f]))
 
     (define/public (replace-doc uri text)
@@ -52,7 +53,7 @@
          (send doc-text erase)
          (send doc-text insert text 0)
 
-         (send-check-syntax worker text)]
+         (worker-send worker text)]
         [_ #f]))
 
     (define/public (get-doc-text uri)
@@ -63,7 +64,7 @@
     (define/public (get-doc-trace uri)
       (match (get-doc uri)
         [(document doc-text doc-trace worker)
-         (define new-doc-trace (receive-check-syntax worker doc-trace))
+         (define new-doc-trace (worker-receive worker doc-trace))
          (hash-set! docs (string->symbol uri)
                     (document doc-text new-doc-trace worker))
          new-doc-trace]

@@ -1,19 +1,39 @@
 #lang racket/base
+(require racket/async-channel
+         racket/match)
 
-(define (empty-queue msg)
-  (define msg* (thread-try-receive))
-  (if msg* (empty-queue msg*) msg))
+(struct worker (thrd ch))
 
-(define (start-worker work)
-  (define return-to (current-thread))
+(define (make-worker work)
+  (define return-to (make-async-channel))
   (define (do-work)
-    (define msg (empty-queue (thread-receive)))
+    (define msg (empty-queue thread-try-receive (thread-receive)))
     (define res (work msg))
-    (thread-send return-to res)
+    (async-channel-put return-to res)
     (do-work))
-  (thread do-work))
+  (worker (thread do-work) return-to))
 
-(provide (all-defined-out))
+(define (worker-receive w last-msg)
+  (define ((try-receive ch))
+    (async-channel-try-get ch))
+
+  (match-define (worker _ ch) w)
+  (define msg (if last-msg last-msg (async-channel-get ch)))
+  (empty-queue (try-receive ch) msg))
+
+(define (worker-send w msg)
+  (match-define (worker thrd _) w)
+  (thread-send thrd msg))
+
+(define (kill-worker w)
+  (match-define (worker thrd _) w)
+  (kill-thread thrd))
+
+(define (empty-queue try-receive last-msg)
+  (define msg (try-receive))
+  (if msg (empty-queue try-receive msg) last-msg))
+
+(provide make-worker worker-receive worker-send kill-worker)
 
 (module+ test
   (require rackunit)
@@ -21,11 +41,11 @@
   (define (work msg)
     (add1 msg))
 
-  (define thd (start-worker work))
-  (thread-send thd 2)
-  (check-equal? (thread-receive) 3)
+  (define wrk (make-worker work))
+  (worker-send wrk 2)
+  (check-equal? (worker-receive wrk #f) 3)
 
-  (thread-send thd 8)
-  (thread-send thd 4)
-  (thread-send thd 10)
-  (check-equal? (empty-queue (thread-receive)) 11))
+  (worker-send wrk 8)
+  (worker-send wrk 4)
+  (worker-send wrk 10)
+  (check-equal? (worker-receive wrk #f) 11))
