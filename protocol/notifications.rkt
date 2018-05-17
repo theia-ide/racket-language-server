@@ -28,11 +28,18 @@
   (define text (send doc-text get-text))
   (define next-token (make-tokenizer text))
   (define tokens
-    (for/list ([token (in-producer next-token eof-object?)])
+    (for/fold ([out empty])
+              ([token (in-producer next-token eof-object?)])
       (match-define (list text type paren? start end mode) token)
-      (hasheq 'kind (symbol->string type)
-              'mode (symbol->string mode)
-              'range (pos/pos->Range doc-text (sub1 start) (sub1 end)))))
+      ;; Skip 'white-space and 'no-color.
+      (if (or (eq? type 'white-space)
+              (eq? type 'no-color))
+          out
+          (cons
+           (hasheq 'kind (symbol->string type)
+                   'mode (symbol->string mode)
+                   'range (pos/pos->Range doc-text (sub1 start) (sub1 end)))
+           out))))
 
   (send-notification "racket/colorize"
                      (hasheq 'uri uri
