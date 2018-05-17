@@ -17,7 +17,7 @@
 (define workspace%
   (class object%
     (super-new)
-    (init-field [docs (make-hasheq)])
+    (init-field change report [docs (make-hasheq)])
 
     (define (get-doc uri)
       (unless (uri-is-path? uri)
@@ -27,9 +27,12 @@
     (define/public (add-doc uri text)
       (define doc-text (new racket:text%))
       (send doc-text insert text 0)
-      (define worker (start-check-syntax (uri->path uri) text))
+      (define worker (start-check-syntax (uri->path uri)
+                                         text
+                                         (lambda (trace) (report uri trace))))
       (define doc (document doc-text #f worker))
-      (hash-set! docs (string->symbol uri) doc))
+      (hash-set! docs (string->symbol uri) doc)
+      (change uri doc-text))
 
     (define/public (remove-doc uri)
       (match (get-doc uri)
@@ -43,8 +46,9 @@
         [(document doc-text _ worker)
          (send doc-text insert text start end)
 
-         (define text (send doc-text get-text))
-         (worker-send worker text)]
+         (define new-text (send doc-text get-text))
+         (worker-send worker new-text)
+         (change uri doc-text)]
         [_ #f]))
 
     (define/public (replace-doc uri text)
@@ -53,7 +57,8 @@
          (send doc-text erase)
          (send doc-text insert text 0)
 
-         (worker-send worker text)]
+         (worker-send worker text)
+         (change uri doc-text)]
         [_ #f]))
 
     (define/public (get-doc-text uri)
@@ -61,6 +66,8 @@
         [(document doc-text _ _) doc-text]
         [_ #f]))
 
+    ;; Always returns the most recent available trace.
+    ;; If non is available it will block and memoize the result.
     (define/public (get-doc-trace uri)
       (match (get-doc uri)
         [(document doc-text doc-trace worker)
@@ -84,7 +91,9 @@
 (module+ test
   (require rackunit)
 
-  (define ws (new workspace%))
+  (define ws (new workspace%
+                  [change (lambda (uri doc-text) #f)]
+                  [report (lambda (uri doc-trace) #f)]))
 
   (define uris '("file:///home/user/file.txt"
                  "file:///home/user/other.txt"))

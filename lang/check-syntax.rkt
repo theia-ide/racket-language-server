@@ -16,7 +16,7 @@
   (match-define-values (code _ _ _ _ _ _ _) (struct-type-info struct-type))
   (define msg (exn-message e))
   (define srclocs ((exn:srclocs-accessor e) e))
-  (exception code msg srclocs))
+  (exception (symbol->string code) msg srclocs))
 
 (define build-trace%
   (class (annotations-mixin object%)
@@ -42,6 +42,7 @@
       (set! warnings (cons warn warnings))
       (void))
 
+    (define/public (get-diagnostics) (append errors warnings))
     (define/public (get-hovers) hovers)
 
     (define/override (syncheck:find-source-object stx)
@@ -124,7 +125,7 @@
 (define ((report-error trace) exn)
   (send trace add-error (exn->exception exn)))
 
-(define (check-syntax path text)
+(define (check-syntax path text report)
   (define ns (make-base-namespace))
   (define trace (new build-trace% [path path]))
   (match-define-values (src-dir _ #f)
@@ -141,12 +142,13 @@
                     (λ () (read-syntax text in))))
       (add-syntax (expand stx)))
     (done))
+  (report trace)
   trace)
 
 
-(define (start-check-syntax path text)
+(define (start-check-syntax path text report)
   (define (work msg)
-    (check-syntax path msg))
+    (check-syntax path msg report))
   (define w (make-worker work))
   (worker-send w text)
   w)

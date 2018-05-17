@@ -1,11 +1,10 @@
 #lang racket/base
 (require racket/class
          racket/match
+         racket/list
          data/interval-map
          "conversion.rkt"
-         "jsonrpc.rkt" ; send-notification
-         "lsp.rkt"
-         "../lang/lexer.rkt")
+         "lsp.rkt")
 
 ;; Mutable variables
 (define already-initialized? #f)
@@ -45,10 +44,7 @@
      #:textDocument (TextDocumentItem #:uri uri
                                       #:text text))
     params)
-  (send ws add-doc uri text)
-
-  ;; Send colorize notification
-  (racket/colorize ws uri))
+  (send ws add-doc uri text))
 
 (define (text-document/did-close ws params)
   (match-define
@@ -75,10 +71,7 @@
        (define end-pos (+ st-pos range-ln))
        (send ws update-doc uri text st-pos end-pos)]
       [(TextDocumentContentChangeEvent #:text text)
-       (send ws replace-doc uri text)]))
-
-  ;; Send colorize notification
-  (racket/colorize ws uri))
+       (send ws replace-doc uri text)])))
 
 ;; Text document methods
 (define (text-document/hover ws params)
@@ -97,27 +90,5 @@
       (Hover #:contents text
              #:range (pos/pos->Range doc-text start end))
       'null))
-
-;; Racket methods
-
-;; Racket colorize notification
-;;
-;; Called when a text document open or text document change event is received
-(define (racket/colorize ws uri)
-  (define doc-text (send ws get-doc-text uri))
-  (define text (send ws open-doc-text uri))
-
-  (define next-token (make-tokenizer text))
-  (define tokens
-    (for/list ([token (in-producer next-token eof-object?)])
-      (match-define (list text type paren? start end) token)
-      (hasheq 'kind (symbol->string type)
-              'range (pos/pos->Range doc-text (sub1 start) (sub1 end)))))
-  (send-racket/colorize uri tokens))
-
-(define (send-racket/colorize uri tokens)
-  (send-notification "racket/colorize"
-                     (hasheq 'uri uri
-                             'tokens tokens)))
 
 (provide (all-defined-out))
