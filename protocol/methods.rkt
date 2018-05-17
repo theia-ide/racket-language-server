@@ -37,6 +37,8 @@
 (define (lsp/exit ws params)
   (exit (if already-shutdown? 0 1)))
 
+(define (lsp/cancel-request ws params) #f)
+
 ;; Synchronization methods
 (define (text-document/did-open ws params)
   (match-define

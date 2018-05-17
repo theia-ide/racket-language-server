@@ -36,6 +36,7 @@
 
 (define (process-notification state method params)
   (match method
+    ["$/cancelRequest" (lsp/cancel-request state params)]
     ["initialized" (lsp/initialized state params)]
     ["exit" (lsp/exit state params)]
     ["textDocument/didOpen" (text-document/did-open state params)]

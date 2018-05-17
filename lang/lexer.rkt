@@ -16,32 +16,66 @@
     [(equal? mode-proc scribble-inside-lexer) 'scribble]
     [else 'other]))
 
-(define (tokenize-lang text start end)
-  (define lang-line
-    (regexp-match #px"^(#lang)(\\s+)(.+)$" text))
-  (match lang-line
-    [(list all lang white symbol)
-     (define end-lang (+ start 5))
-     (define end-white (+ start 6 (string-length white)))
-     (list
-      (list lang 'keyword #f start end-lang 'lang)
-      (list white 'white-space #f (add1 end-lang) end-white 'lang)
-      (list symbol 'symbol #f (add1 end-white) end 'lang))]
-    [_ #f]))
+;; Splits 'other tokens starting with #lang into a 'lang-keyword
+;; and 'lang-symbol token.
+(define (lang-tokenizer next-token)
+  (define lang-tokens #f)
+  (define (tokenize-lang text start end)
+    (define lang-line
+      (regexp-match #px"^(#lang)(\\s+)(.+)$" text))
+    (match lang-line
+      [(list all lang white symbol)
+       (define end-lang (+ start 5))
+       (define end-white (+ start 6 (string-length white)))
+       (list
+        (list lang 'keyword #f start end-lang 'lang)
+        (list white 'white-space #f (add1 end-lang) end-white 'lang)
+        (list symbol 'symbol #f (add1 end-white) end 'lang))]
+      [_ #f]))
 
-(define (skip proc next-token)
+  (define (lang-next-token)
+    (define token (car lang-tokens))
+    (set! lang-tokens (cdr lang-tokens))
+    (when (empty? lang-tokens)
+      (set! lang-tokens #f))
+    token)
+
+  (define (default-next-token)
+    (define token (next-token))
+    (match token
+      [(? eof-object?) token]
+      [(list lexeme type _ start end _)
+       (if (eq? type 'other)
+           (begin
+             (set! lang-tokens (tokenize-lang lexeme start end))
+             (if lang-tokens (lang-next-token) token))
+           token)]))
+
+  (define (new-next-token)
+    (if lang-tokens (lang-next-token) (default-next-token)))
+  new-next-token)
+
+(define (skip-white next-token)
+  (define (skip token)
+    (match-define (list _ type _ _ _ _) token)
+    (if (or (eq? type 'white-space)
+            (eq? type 'whitespace)
+            (eq? type 'no-color))
+        (new-next-token) token))
+
   (define (new-next-token)
     (define token (next-token))
-    (if (proc token) (new-next-token) token))
+    (if (eof-object? token) token (skip token)))
   new-next-token)
 
 ;; Counts parenthesis and reclassifies the tokens of the sexp after
 ;; 'sexp-comment to 'comment.
-(define (sexp-comment-handler)
+(define (sexp-comment-reclassifier next-token)
   (define (is-open paren)
     (or (eq? paren '|(|) (eq? paren '|{|) (eq? paren '|[|)))
   (define state 0)
-  (define (is-comment type paren)
+  (define (reclassify token)
+    (match-define (list lexeme type paren start end mode) token)
     (cond
       [(eq? type 'sexp-comment)
        (set! state 1)]
@@ -59,51 +93,28 @@
       [(eq? state -1)
        (set! state 0)])
 
-    (if (eq? state 0) #f #t))
-  is-comment)
+    (if (eq? state 0)
+        token
+        (list lexeme 'comment paren start end mode)))
+
+  (define (new-next-token)
+    (define token (next-token))
+    (if (eof-object? token) token (reclassify token)))
+  new-next-token)
 
 (define (get-lexer in)
   (define offset 0)
   (define mode #f)
-  (define lang-tokens #f)
-  (define is-comment (sexp-comment-handler))
   (define (next-token)
-    (define (default-next-token)
-      (match-define-values
-       (lexeme type data start end newOffset newMode)
-       (module-lexer in offset mode))
-      (set! offset newOffset)
-      (set! mode newMode)
+    (match-define-values
+     (lexeme type data start end newOffset newMode)
+     (module-lexer in offset mode))
+    (set! offset newOffset)
+    (set! mode newMode)
 
-      ;; Normalize whitespace naming
-      (define newType (if (eq? type 'whitespace) 'white-space type))
-
-      ;; Reclassify tokens after 'sexp-comment
-      (define newType* (if (is-comment type data) 'comment newType))
-
-      (define token
-        (if (eof-object? lexeme)
-            eof
-            (list lexeme newType* data start end (mode->symbol mode))))
-
-      ;; Splits 'other tokens starting with #lang into a 'lang-keyword
-      ;; and 'lang-symbol token.
-      (if (eq? type 'other)
-          (begin
-            (set! lang-tokens (tokenize-lang lexeme start end))
-            (if lang-tokens (lang-next-token) token))
-          token))
-
-    (define (lang-next-token)
-      (define token (car lang-tokens))
-      (set! lang-tokens (cdr lang-tokens))
-      (when (empty? lang-tokens)
-        (set! lang-tokens #f))
-      token)
-
-    (if lang-tokens
-        (lang-next-token)
-        (default-next-token)))
+    (if (eof-object? lexeme)
+        eof
+        (list lexeme type data start end (mode->symbol mode))))
   next-token)
 
 (define (make-tokenizer str)
@@ -125,7 +136,9 @@
 RACKET
 )
 
-(check-equal? (apply-tokenizer-maker make-tokenizer racket-str)
+(check-equal? (apply-tokenizer-maker
+               (compose lang-tokenizer make-tokenizer)
+               racket-str)
               '(("#lang" keyword #f 1 6 lang)
                 (" " white-space #f 7 8 lang)
                 ("racket/base" symbol #f 9 18 lang)
@@ -351,4 +364,4 @@ ELECTRON
 )
 
 
-(provide make-tokenizer)
+(provide make-tokenizer skip-white sexp-comment-reclassifier lang-tokenizer)
