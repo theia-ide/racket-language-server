@@ -29,7 +29,8 @@
       (send doc-text insert text 0)
       (define worker (start-check-syntax (uri->path uri)
                                          text
-                                         (lambda (trace) (report uri trace))))
+                                         (lambda (trace)
+                                           (report uri doc-text trace))))
       (define doc (document doc-text #f worker))
       (hash-set! docs (string->symbol uri) doc)
       (change uri doc-text))
@@ -92,8 +93,8 @@
   (require rackunit)
 
   (define ws (new workspace%
-                  [change (lambda (uri doc-text) #f)]
-                  [report (lambda (uri doc-trace) #f)]))
+                  [change (lambda (uri text) #f)]
+                  [report (lambda (uri text trace) #f)]))
 
   (define uris '("file:///home/user/file.txt"
                  "file:///home/user/other.txt"))

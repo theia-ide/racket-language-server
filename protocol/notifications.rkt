@@ -7,15 +7,16 @@
          "jsonrpc.rkt"
          "../lang/lexer.rkt")
 
-(define (report uri trace)
-  (text-document/publish-diagnostics uri trace))
+(define (report uri text trace)
+  (racket/colorize-semantic uri text trace)
+  (text-document/publish-diagnostics uri text trace))
 
 (define (change uri text)
   (racket/colorize uri text))
 
 ;; Publish diagnostics notification
-(define (text-document/publish-diagnostics uri doc-trace)
-  (define diagnostics (flatten (map exception->Diagnostics
+(define (text-document/publish-diagnostics uri doc-text doc-trace)
+  (define diagnostics (flatten (map (exception->Diagnostics doc-text)
                                     (send doc-trace get-diagnostics))))
   (send-notification
    "textDocument/publishDiagnostics"
@@ -33,6 +34,19 @@
               'range (pos/pos->Range doc-text (sub1 start) (sub1 end)))))
 
   (send-notification "racket/colorize"
+                     (hasheq 'uri uri
+                             'tokens tokens)))
+
+;; Racket semantic coloring notification
+(define (racket/colorize-semantic uri doc-text doc-trace)
+  (define colors (send doc-trace get-semantic-coloring))
+  (define tokens
+    (map (match-lambda
+           [(list start end type)
+            (hasheq 'kind type
+                    'range (pos/pos->Range doc-text (sub1 start) (sub1 end)))])
+         colors))
+  (send-notification "racket/colorize-semantic"
                      (hasheq 'uri uri
                              'tokens tokens)))
 

@@ -22,12 +22,12 @@
   (Range #:start (pos->Position t start)
          #:end (pos->Position t end)))
 
-(define (srcloc->Range sl)
+(define (srcloc->Range t sl)
   (match-define (srcloc src line col pos span) sl)
-  (Range #:start (Position #:line (sub1 line) #:character col)
-         #:end (Position #:line (sub1 line) #:character (+ col span))))
+  (Range #:start (pos->Position t pos)
+         #:end (pos->Position t (+ pos span))))
 
-(define (exception->Diagnostics e)
+(define ((exception->Diagnostics t) e)
   (define-values (code msg srclocs severity)
     (match e
       [(exception code msg srclocs)
@@ -35,7 +35,7 @@
       [(warning code msg srclocs)
        (values code msg srclocs DiagnosticSeverityWarning)]))
   (map (lambda (sl)
-         (Diagnostic #:range (srcloc->Range sl)
+         (Diagnostic #:range (srcloc->Range t sl)
                      #:message msg
                      #:severity severity
                      #:code code

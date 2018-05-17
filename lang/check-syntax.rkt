@@ -25,10 +25,9 @@
 
     (define errors empty)
     (define warnings empty)
+    (define semantic-coloring empty)
 
-    (define semantic-coloring (make-interval-map))
     (define hovers (make-interval-map))
-
     ;; pos -> (set pos ...)
     (define symbol-declarations (make-interval-map))
     ;; pos -> pos
@@ -43,6 +42,7 @@
       (void))
 
     (define/public (get-diagnostics) (append errors warnings))
+    (define/public (get-semantic-coloring) semantic-coloring)
     (define/public (get-hovers) hovers)
 
     (define/override (syncheck:find-source-object stx)
@@ -98,10 +98,7 @@
 
     (define/override (syncheck:add-unused-require
                       req-src req-pos-left req-pos-right)
-      (add-warning (warning 'warn:unused-require "Unused require."
-                            ;; line and column unknown
-                            (srcloc path #f #f req-pos-left
-                                    (- req-pos-right req-pos-left))))
+      ;; Isn't called
       (void))
 
     (define/override (syncheck:add-jump-to-definition
@@ -117,7 +114,15 @@
     ;; style-name: any/c, mode: any/c
     (define/override (syncheck:color-range
                       source-obj start finish style-name)
-      (interval-map-set! semantic-coloring start finish style-name)
+      (define type (substring style-name 22))
+      (if (equal? type "unused-require")
+          (add-warning (warning "warn:unused-require" "Unused require."
+                                ;; line and column unknown
+                                (list
+                                 (srcloc path #f #f start
+                                         (- finish start)))))
+          (set! semantic-coloring
+                (cons (list start finish type) semantic-coloring)))
       (void))
 
     ))
