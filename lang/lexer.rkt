@@ -3,6 +3,7 @@
          syntax-color/racket-lexer
          syntax-color/scribble-lexer
          racket/match
+         racket/list
          rackunit)
 
 (define (mode->symbol mode)
@@ -15,18 +16,60 @@
     [(equal? mode-proc scribble-inside-lexer) 'scribble]
     [else 'other]))
 
+(define (tokenize-lang text start end)
+  (define lang-line
+    (regexp-match #px"^(#lang)(\\s+)(.+)$" text))
+  (match lang-line
+    [(list all lang white symbol)
+     (define end-lang (+ start 5))
+     (define end-white (+ start 6 (string-length white)))
+     (list
+      (list lang 'keyword #f start end-lang 'lang)
+      (list white 'white-space #f (add1 end-lang) end-white 'lang)
+      (list symbol 'symbol #f (add1 end-white) end 'lang))]
+    [_ #f]))
+
+
+;; Counts parenthesis and reclassifies the tokens of the sexp after
+;; 'sexp-comment to 'comment.
 (define (get-lexer in)
   (define offset 0)
   (define mode #f)
+  (define lang-tokens #f)
   (define (next-token)
-    (match-define-values
-     (lexeme type data start end newOffset newMode)
-     (module-lexer in offset mode))
-    (set! offset newOffset)
-    (set! mode newMode)
-    (if (eof-object? lexeme)
-        eof
-        (list lexeme type data start end (mode->symbol mode))))
+    (define (default-next-token)
+      (match-define-values
+       (lexeme type data start end newOffset newMode)
+       (module-lexer in offset mode))
+      (set! offset newOffset)
+      (set! mode newMode)
+
+      ;; Normalize whitespace naming
+      (define newType (if (eq? type 'whitespace) 'white-space type))
+
+      (define token
+        (if (eof-object? lexeme)
+            eof
+            (list lexeme newType data start end (mode->symbol mode))))
+
+      ;; Splits 'other tokens starting with #lang into a 'lang-keyword
+      ;; and 'lang-symbol token.
+      (if (eq? type 'other)
+          (begin
+            (set! lang-tokens (tokenize-lang lexeme start end))
+            (if lang-tokens (lang-next-token) token))
+          token))
+
+    (define (lang-next-token)
+      (define token (car lang-tokens))
+      (set! lang-tokens (cdr lang-tokens))
+      (when (empty? lang-tokens)
+        (set! lang-tokens #f))
+      token)
+
+    (if lang-tokens
+        (lang-next-token)
+        (default-next-token)))
   next-token)
 
 (define (make-tokenizer str)
@@ -49,7 +92,9 @@ RACKET
 )
 
 (check-equal? (apply-tokenizer-maker make-tokenizer racket-str)
-              '(("#lang racket/base" other #f 1 18 racket)
+              '(("#lang" keyword #f 1 6 lang)
+                (" " white-space #f 7 8 lang)
+                ("racket/base" symbol #f 9 18 lang)
                 ("\n" white-space #f 18 19 racket)
                 ("(" parenthesis |(| 19 20 racket)
                 ("define" symbol #f 20 26 racket)
@@ -121,7 +166,9 @@ SCRIBBLE
   )
 
 (check-equal? (apply-tokenizer-maker make-tokenizer scribble-str)
-              '(("#lang scribble/manual" other #f 1 22 scribble)
+              '(("#lang" keyword #f 1 6 lang)
+                (" " white-space #f 7 8 lang)
+                ("scribble/manual" symbol #f 9 22 lang)
                 (" " white-space #f 22 23 scribble)
                 ("@" parenthesis #f 23 24 scribble)
                 ("(" parenthesis |(| 24 25 scribble)
@@ -227,7 +274,9 @@ ELECTRON
   )
 
 (check-equal? (apply-tokenizer-maker make-tokenizer electron-str)
-              '(("#lang electron" other #f 1 15 other)
+              '(("#lang" keyword #f 1 6 lang)
+                (" " white-space #f 7 8 lang)
+                ("electron" symbol #f 9 15 lang)
                 ("\n" no-color #f 15 16 other)
                 ("// comment line" comment #f 16 31 other)
                 ("\n" no-color #f 31 32 other)
