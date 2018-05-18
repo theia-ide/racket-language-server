@@ -112,6 +112,10 @@
     (if (eof-object? token) token (reclassify token)))
   new-next-token)
 
+;; Reclassifies tokens based on semantic information
+(define ((semantic-reclassifier interval-map) next-token)
+  next-token)
+
 (define (get-lexer in)
   (define offset 0)
   (define mode #f)
@@ -371,4 +375,5 @@ ELECTRON
 
 
 (provide apply-tokenizer-maker make-tokenizer list->producer
-         skip-white sexp-comment-reclassifier lang-tokenizer)
+         skip-white lang-tokenizer
+         sexp-comment-reclassifier semantic-reclassifier)

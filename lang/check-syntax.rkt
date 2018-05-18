@@ -25,7 +25,7 @@
 
     (define errors empty)
     (define warnings empty)
-    (define semantic-coloring empty)
+    (define semantic-coloring (make-interval-map))
 
     (define hovers (make-interval-map))
     ;; pos -> (set pos ...)
@@ -121,8 +121,7 @@
                                 (list
                                  (srcloc path #f #f start
                                          (- finish start)))))
-          (set! semantic-coloring
-                (cons (list start finish type) semantic-coloring)))
+          (interval-map-set! semantic-coloring start finish type))
       (void))
 
     ))

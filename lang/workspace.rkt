@@ -43,7 +43,8 @@
 
       ;; Emit change event (hide trace and worker)
       ;; If trace is required the report event should be used.
-      (change uri doc-text tokens))
+      ;; The an OLD trace is provided if AVAILABLE
+      (change uri doc-text tokens doc-trace))
 
     (define ((do-report uri ws reporter) doc-trace)
       (match-define (document doc-text doc-tokens _ _) (get-doc uri))
@@ -120,7 +121,7 @@
   (require rackunit)
 
   (define ws (new workspace%
-                  [change (lambda (uri doc-text doc-tokens) #f)]
+                  [change (lambda (uri doc-text doc-tokens [doc-trace #f]) #f)]
                   [report (lambda (uri doc-text doc-tokens doc-trace) #f)]))
 
   (define uris '("file:///home/user/file.txt"
