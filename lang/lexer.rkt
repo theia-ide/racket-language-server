@@ -213,9 +213,7 @@ SCRIBBLE
   )
 
 (check-equal? (apply-tokenizer-maker make-tokenizer scribble-str)
-              '(("#lang" keyword #f 1 6 lang)
-                (" " white-space #f 7 8 lang)
-                ("scribble/manual" symbol #f 9 22 lang)
+              '(("#lang scribble/manual" other #f 1 22 scribble)
                 (" " white-space #f 22 23 scribble)
                 ("@" parenthesis #f 23 24 scribble)
                 ("(" parenthesis |(| 24 25 scribble)
@@ -321,9 +319,7 @@ ELECTRON
   )
 
 (check-equal? (apply-tokenizer-maker make-tokenizer electron-str)
-              '(("#lang" keyword #f 1 6 lang)
-                (" " white-space #f 7 8 lang)
-                ("electron" symbol #f 9 15 lang)
+              '(("#lang electron" other #f 1 15 other)
                 ("\n" no-color #f 15 16 other)
                 ("// comment line" comment #f 16 31 other)
                 ("\n" no-color #f 31 32 other)
