@@ -1,10 +1,10 @@
 #lang racket/base
-(require syntax-color/module-lexer
-         syntax-color/racket-lexer
-         syntax-color/scribble-lexer
-         racket/match
+(require racket/match
          racket/list
-         rackunit)
+         data/interval-map
+         syntax-color/module-lexer
+         syntax-color/racket-lexer
+         syntax-color/scribble-lexer)
 
 (define (list->producer lst)
   (define tokens lst)
@@ -113,8 +113,16 @@
   new-next-token)
 
 ;; Reclassifies tokens based on semantic information
-(define ((semantic-reclassifier interval-map) next-token)
-  next-token)
+(define ((semantic-reclassifier intervals) next-token)
+  (define (new-next-token)
+    (match (next-token)
+      [(? eof-object?) eof]
+      [(list lexeme type paren start end mode)
+       (let ([pos (+ start (floor (/ (- end start) 2)))])
+         (match-define-values (_ _ new-type)
+                              (interval-map-ref/bounds intervals pos #f))
+         (list lexeme (if new-type new-type type) paren start end mode))]))
+  new-next-token)
 
 (define (get-lexer in)
   (define offset 0)
@@ -142,6 +150,8 @@
     tok))
 
 (module+ test
+  (require rackunit)
+
   (define racket-str #<<RACKET
 #lang racket/base
 (define r 10)

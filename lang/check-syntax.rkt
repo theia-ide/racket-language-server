@@ -121,7 +121,8 @@
                                 (list
                                  (srcloc path #f #f start
                                          (- finish start)))))
-          (interval-map-set! semantic-coloring start finish type))
+          (interval-map-set! semantic-coloring (add1 start) (add1 finish)
+                             (string->symbol type)))
       (void))
 
     ))
