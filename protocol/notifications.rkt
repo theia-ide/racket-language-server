@@ -7,15 +7,15 @@
          "jsonrpc.rkt"
          "../lang/lexer.rkt")
 
-(define (report uri text trace)
-  (racket/colorize-semantic uri text trace)
-  (text-document/publish-diagnostics uri text trace))
+(define (report uri doc-text doc-tokens doc-trace)
+  (racket/colorize-semantic uri doc-text doc-tokens doc-trace)
+  (text-document/publish-diagnostics uri doc-text doc-tokens doc-trace))
 
-(define (change uri text)
-  (racket/colorize uri text))
+(define (change uri doc-text doc-tokens)
+  (racket/colorize uri doc-text doc-tokens))
 
 ;; Publish diagnostics notification
-(define (text-document/publish-diagnostics uri doc-text doc-trace)
+(define (text-document/publish-diagnostics uri doc-text doc-tokens doc-trace)
   (define diagnostics (flatten (map (exception->Diagnostics doc-text)
                                     (send doc-trace get-diagnostics))))
   (send-notification
@@ -24,13 +24,12 @@
                              #:diagnostics diagnostics)))
 
 ;; Racket colorize notification
-(define (racket/colorize uri doc-text)
+(define (racket/colorize uri doc-text doc-tokens)
   (define text (send doc-text get-text))
   (define next-token
-    (lang-tokenizer
-     (sexp-comment-reclassifier
-      (skip-white
-       (make-tokenizer text)))))
+    (sexp-comment-reclassifier
+     (skip-white
+      (list->producer doc-tokens))))
   (define tokens
     (for/list ([token (in-producer next-token eof-object?)])
       (match-define (list text type paren? start end mode) token)
@@ -43,7 +42,7 @@
                              'tokens tokens)))
 
 ;; Racket semantic coloring notification
-(define (racket/colorize-semantic uri doc-text doc-trace)
+(define (racket/colorize-semantic uri doc-text doc-tokens doc-trace)
   (define colors (send doc-trace get-semantic-coloring))
   (define tokens
     (map (match-lambda

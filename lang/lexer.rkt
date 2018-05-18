@@ -6,6 +6,16 @@
          racket/list
          rackunit)
 
+(define (list->producer lst)
+  (define tokens lst)
+  (define (next-token)
+    (if (empty? tokens)
+        eof
+        (let ([token (first tokens)])
+          (set! tokens (rest tokens))
+          token)))
+  next-token)
+
 (define (mode->symbol mode)
   (define mode-proc
     (match mode
@@ -360,4 +370,5 @@ ELECTRON
 )
 
 
-(provide make-tokenizer skip-white sexp-comment-reclassifier lang-tokenizer)
+(provide apply-tokenizer-maker make-tokenizer list->producer
+         skip-white sexp-comment-reclassifier lang-tokenizer)

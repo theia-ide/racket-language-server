@@ -151,11 +151,10 @@
   trace)
 
 
-(define (start-check-syntax path text report)
+(define (start-check-syntax path report)
   (define (work msg)
     (check-syntax path msg report))
   (define w (make-worker work))
-  (worker-send w text)
   w)
 
 (provide (all-defined-out))

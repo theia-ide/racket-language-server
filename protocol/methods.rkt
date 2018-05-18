@@ -82,7 +82,7 @@
      #:textDocument (TextDocumentIdentifier #:uri uri)
      #:position (Position #:line line #:character char))
     params)
-  (define-values (doc-text doc-trace) (send ws open-doc uri))
+  (define-values (doc-text _ doc-trace) (send ws open-doc uri))
   (define hovers (send doc-trace get-hovers))
   (define pos (line/char->pos doc-text line char))
   (define-values (start end text)
