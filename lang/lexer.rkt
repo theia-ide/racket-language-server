@@ -1,5 +1,6 @@
 #lang racket/base
-(require racket/match
+(require racket/function
+         racket/match
          racket/list
          data/interval-map
          syntax-color/module-lexer
@@ -116,12 +117,14 @@
 (define ((semantic-reclassifier intervals) next-token)
   (define (new-next-token)
     (match (next-token)
-      [(? eof-object?) eof]
-      [(list lexeme type paren start end mode)
+      [(? eof-object? token) token]
+      [(list lexeme (? (curry eq? 'symbol) type) paren start end
+             (? (compose not (curry eq? 'other)) mode))
        (let ([pos (+ start (floor (/ (- end start) 2)))])
          (match-define-values (_ _ new-type)
                               (interval-map-ref/bounds intervals pos #f))
-         (list lexeme (if new-type new-type type) paren start end mode))]))
+         (list lexeme (if new-type new-type type) paren start end mode))]
+      [token token]))
   new-next-token)
 
 (define (get-lexer in)
