@@ -9,7 +9,11 @@
          "../lang/lexer.rkt")
 
 (define (report uri doc-text doc-tokens doc-trace)
-  (racket/colorize uri doc-text doc-tokens doc-trace)
+  (when (empty? (send doc-trace get-errors))
+    ;; Skip semantic coloring when there are errors in the trace
+    ;; since that will remove the existing semantic coloring if
+    ;; the previous syntax check was successful.
+    (racket/colorize uri doc-text doc-tokens doc-trace))
   (text-document/publish-diagnostics uri doc-text doc-tokens doc-trace))
 
 (define (change uri doc-text doc-tokens [doc-trace #f])
@@ -26,20 +30,23 @@
 
 ;; Racket colorize notification
 (define (racket/colorize uri doc-text doc-tokens [doc-trace #f])
+  (define text (send doc-text get-text))
   (define semantic-colors (if doc-trace
                               (send doc-trace get-semantic-coloring)
                               (make-interval-map)))
-  (define text (send doc-text get-text))
+  (define errors (if doc-trace
+                     (send doc-trace get-errors)
+                     '()))
   (define next-token
     ((compose sexp-comment-reclassifier
-              (semantic-reclassifier semantic-colors)
               skip-white
+              (semantic-reclassifier semantic-colors errors)
               list->producer)
       doc-tokens))
   (define tokens
     (for/list ([token (in-producer next-token eof-object?)])
-      (match-define (list text type paren? start end mode) token)
-      (hasheq 'kind (symbol->string type)
+      (match-define (list text type data start end mode) token)
+      (hasheq 'kind (symbol->string (if (and (eq? type 'symbol) data) data type))
               'mode (symbol->string mode)
               'range (pos/pos->Range doc-text (sub1 start) (sub1 end)))))
 

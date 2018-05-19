@@ -1,5 +1,6 @@
 #lang racket/base
 (require racket/class
+         racket/list
          racket/match
          racket/string
          framework
@@ -25,14 +26,14 @@
         (error 'document-symbol "uri is not a path"))
       (hash-ref docs (string->symbol uri) #f))
 
-    (define (tokenize text)
+    (define (tokenize text old-tokens)
       (apply-tokenizer-maker
        (compose lang-tokenizer make-tokenizer)
        text))
 
-    (define (do-change uri text doc-text doc-trace worker)
+    (define (do-change uri text doc-text old-tokens doc-trace worker)
       ;; Tokenize text
-      (define tokens (tokenize text))
+      (define tokens (tokenize text old-tokens))
 
       ;; Update document
       (define doc (document doc-text tokens doc-trace worker))
@@ -56,7 +57,7 @@
       (define worker (start-check-syntax
                       (uri->path uri)
                       (do-report uri this report)))
-      (do-change uri text doc-text #f worker))
+      (do-change uri text doc-text '() #f worker))
 
     (define/public (remove-doc uri)
       (match (get-doc uri)
@@ -68,11 +69,11 @@
     (define/public (update-doc uri text start end)
       (displayln "updating" (current-error-port))
       (match (get-doc uri)
-        [(document doc-text _ doc-trace worker)
+        [(document doc-text doc-tokens doc-trace worker)
          (send doc-text insert text start end)
 
          (define new-text (send doc-text get-text))
-         (do-change uri new-text doc-text doc-trace worker)]
+         (do-change uri new-text doc-text doc-tokens doc-trace worker)]
         [_ #f]))
 
     (define/public (replace-doc uri text)
@@ -81,7 +82,7 @@
          (send doc-text erase)
          (send doc-text insert text 0)
 
-         (do-change uri text doc-text doc-trace worker)]
+         (do-change uri text doc-text '() doc-trace worker)]
         [_ #f]))
 
     (define/public (get-doc-text uri)
@@ -95,9 +96,20 @@
       (match (get-doc uri)
         [(document doc-text doc-tokens doc-trace worker)
          (define new-doc-trace (worker-receive worker doc-trace))
-         (hash-set! docs (string->symbol uri)
-                    (document doc-text doc-tokens new-doc-trace worker))
-         new-doc-trace]
+         (define errors (send new-doc-trace get-errors))
+         ;; Update the doc-trace when there isn't one yet
+         ;; or it's error free. Otherwise add the errors
+         ;; to the old doc-trace.
+         (if (or (not doc-trace) (empty? errors))
+             (begin
+               (hash-set! docs (string->symbol uri)
+                          (document doc-text doc-tokens new-doc-trace worker))
+               new-doc-trace)
+             (begin
+               (for-each (lambda (e)
+                           (send doc-trace add-error e))
+                         errors)
+               doc-trace))]
         [_ #f]))
 
     (define/public (get-doc-tokens uri)

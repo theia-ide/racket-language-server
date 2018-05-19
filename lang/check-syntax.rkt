@@ -41,6 +41,7 @@
       (set! warnings (cons warn warnings))
       (void))
 
+    (define/public (get-errors) errors)
     (define/public (get-diagnostics) (append errors warnings))
     (define/public (get-semantic-coloring) semantic-coloring)
     (define/public (get-hovers) hovers)
