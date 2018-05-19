@@ -19,6 +19,8 @@
 ;; Defined by LSP protocol
 (define REQUEST-CANCELLED -32800)
 
+(define output-semaphore (make-semaphore 1))
+
 ;; Read a message from in
 (define (read-message [in (current-input-port)])
   (match (read-line in 'return-linefeed)
@@ -29,12 +31,15 @@
 
 ;; Write a message to out
 (define (write-message msg [out (current-output-port)])
-  (define null-port (open-output-nowhere))
-  (write-json msg null-port)
-  (define content-length (file-position null-port))
-  (fprintf out "Content-Length: ~a\r\n\r\n" content-length)
-  (write-json msg out)
-  (flush-output out))
+  (call-with-semaphore
+   output-semaphore
+   (lambda ()
+     (define null-port (open-output-nowhere))
+     (write-json msg null-port)
+     (define content-length (file-position null-port))
+     (fprintf out "Content-Length: ~a\r\n\r\n" content-length)
+     (write-json msg out)
+     (flush-output out))))
 
 ;; Send a notification
 (define (send-notification method params)
