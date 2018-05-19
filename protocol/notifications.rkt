@@ -38,14 +38,14 @@
                      (send doc-trace get-errors)
                      '()))
   (define next-token
-    ((compose sexp-comment-reclassifier
-              skip-white
-              (semantic-reclassifier semantic-colors errors)
-              list->producer)
-      doc-tokens))
+    (sexp-comment-reclassifier
+     (skip-white
+      ((semantic-reclassifier semantic-colors errors)
+       (list->producer doc-tokens)))))
+
   (define tokens
-    (for/list ([token (in-producer next-token eof-object?)])
-      (match-define (list text type data start end mode) token)
+    (for/list ([tok (in-producer next-token void?)])
+      (match-define (token text type data start end mode diff) tok)
       (hasheq 'kind (symbol->string (if (and (eq? type 'symbol) data) data type))
               'mode (symbol->string mode)
               'range (pos/pos->Range doc-text (sub1 start) (sub1 end)))))

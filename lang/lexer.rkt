@@ -140,27 +140,29 @@
     (or (eq? paren '|(|) (eq? paren '|{|) (eq? paren '|[|)))
   (define state 0)
   (define (reclassify tok)
-    (match-define (token lexeme type paren start end mode diff) tok)
-    (cond
-      [(eq? type 'sexp-comment)
-       (set! state 1)]
+    (match tok
+      [(token lexeme type paren start end mode diff)
+       (cond
+         [(eq? type 'sexp-comment)
+          (set! state 1)]
 
-      [(and (eq? state 1) (eq? type 'symbol))
-       (set! state -1)]
+         [(and (eq? state 1) (eq? type 'symbol))
+          (set! state -1)]
 
-      [(and (> state 0) (eq? type 'parenthesis))
-       (set! state (if (is-open paren)
-                       (add1 state)
-                       (sub1 state)))
-       (when (eq? state 1)
-         (set! state -1))]
+         [(and (> state 0) (eq? type 'parenthesis))
+          (set! state (if (is-open paren)
+                          (add1 state)
+                          (sub1 state)))
+          (when (eq? state 1)
+            (set! state -1))]
 
-      [(eq? state -1)
-       (set! state 0)])
+         [(eq? state -1)
+          (set! state 0)])
 
-    (if (eq? state 0)
-        tok
-        (token lexeme 'comment paren start end mode diff)))
+       (if (eq? state 0)
+           tok
+           (token lexeme 'comment paren start end mode diff))]
+      [tok tok]))
 
   (define (new-next-token)
     (reclassify (next-token)))
@@ -311,6 +313,7 @@ ELECTRON
 )
 
 
-(provide apply-tokenizer-maker make-tokenizer list->producer
+(provide apply-tokenizer-maker make-tokenizer
+         token eof-token eof-token? list->producer
          skip-white lang-tokenizer
          sexp-comment-reclassifier semantic-reclassifier)
