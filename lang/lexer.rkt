@@ -10,17 +10,9 @@
          "check-syntax.rkt") ; for exception
 
 (module+ test
-  (require rackunit)
+  (require rackunit))
 
-  (define (check-token-transform transform tokens-in tokens-out)
-    (define next-token (transform (list->producer tokens-in)))
-    (check-equal?
-     (append
-      (for/list ([tok (in-producer next-token eof-token?)])
-        tok)
-      (list eof-token))
-     tokens-out)))
-
+;; Definitions
 (struct token (lexeme type data start end mode diff) #:transparent)
 
 (define eof-token (token eof #f #f #f #f #f #f))
@@ -30,6 +22,8 @@
     [(token (? eof-object?) _ _ _ _ _ _) #t]
     [_ #f]))
 
+
+;; Lexer
 (define (get-lexer in)
   (define offset 0)
   (define mode #f)
@@ -52,6 +46,55 @@
   (for/list ([tok (in-producer next-token eof-token?)])
     tok))
 
+(module+ test
+  (require rackunit)
+
+  (define racket-str #<<RACKET
+#lang racket/base
+(define r 10)
+(define pi 3.14)
+(displayln (* 2 pi r))
+RACKET
+)
+
+(check-equal? (take (apply-tokenizer-maker make-tokenizer racket-str) 3)
+              (list
+               (token "#lang racket/base" 'other #f 1 18 'racket #f)
+               (token "\n" 'white-space #f 18 19 'racket #f)
+               (token "(" 'parenthesis '|(| 19 20 'racket #f)))
+
+(define scribble-str #<<SCRIBBLE
+#lang scribble/manual
+@(require (for-label json))
+SCRIBBLE
+  )
+
+(check-equal? (take (apply-tokenizer-maker make-tokenizer scribble-str) 3)
+              (list
+               (token "#lang scribble/manual" 'other #f 1 22 'scribble #f)
+               (token " " 'white-space #f 22 23 'scribble #f)
+               (token "@" 'parenthesis #f 23 24 'scribble #f)))
+
+(define electron-str #<<ELECTRON
+#lang electron
+// comment line
+/* multiline comment */
+module MOD {
+  port PORT
+  net NET
+  OTHERMOD {PORT, OTHERPORT=NET}
+}
+ELECTRON
+  )
+
+(check-equal? (take (apply-tokenizer-maker make-tokenizer electron-str) 3)
+              (list
+               (token "#lang electron" 'other #f 1 15 'other #f)
+               (token "\n" 'no-color #f 15 16 'other #f)
+               (token "// comment line" 'comment #f 16 31 'other #f)))
+)
+
+;; Helpers
 (define (list->producer tokens)
   (generator ()
              (for-each yield tokens)))
@@ -67,7 +110,8 @@
   (define mode-proc
     (match mode
       [(? procedure?) mode]
-      [(? pair?) (car mode)]))
+      [(? pair?) (car mode)]
+      ['no-lang-line 'no-lang-line]))
   (cond
     [(equal? mode-proc racket-lexer) 'racket]
     [(equal? mode-proc scribble-inside-lexer) 'scribble]
@@ -80,6 +124,20 @@
   (check-equal? (mode->symbol (cons racket-lexer #f)) 'racket)
   (check-equal? (mode->symbol (cons identity #f)) 'other))
 
+
+;; Token stream transformers
+(module+ test
+  (define (check-token-transform transform tokens-in tokens-out)
+    (define next-token (transform (list->producer tokens-in)))
+    (check-equal?
+     (append
+      (for/list ([tok (in-producer next-token eof-token?)])
+        tok)
+      (list eof-token))
+     tokens-out)))
+
+;; Lang tokenizer
+;;
 ;; Splits 'other tokens starting with #lang into a 'lang-keyword
 ;; and 'lang-symbol token.
 (define (lang-tokenizer next-token)
@@ -109,6 +167,9 @@
     (token "racket" 'symbol #f 7 13 'lang #f)
     eof-token)))
 
+;; Skip whitespace
+;;
+;; Skips white space tokens in token stream.
 (define (skip-white next-token)
   (define (new-next-token)
     (match (next-token)
@@ -133,6 +194,8 @@
     (token #f 'b #f #f #f #f #f)
     eof-token)))
 
+;; Sexp comment reclassifier
+;;
 ;; Counts parenthesis and reclassifies the tokens of the sexp after
 ;; 'sexp-comment to 'comment.
 (define (sexp-comment-reclassifier next-token)
@@ -200,28 +263,34 @@
     eof-token)))
 
 ;; Token stream matcher
+;;
+;; Matches a token stream to an old list of tokens and
+;; sets the offset into the old token stream.
 (define ((token-stream-matcher old-tokens) next-token)
   (define old-next-token (list->producer old-tokens))
+  (define offset 0)
 
-  (define (diff tok old-tok)
-    (match-define (token lexeme type _ _ _ _ _) tok)
+  (define (offset-delta tok old-tok)
+    (match-define (token lexeme type _ start end _ _) tok)
     (match old-tok
-      [(token olexeme otype _ _ _ _ _)
+      [(token olexeme otype _ ostart oend _ _)
        (cond
-         [(eq? lexeme olexeme) 'no-change]
-         [(eq? type otype) 'change]
-         [else 'new])]
-      [_ 'new]))
+         ;; old token
+         [(eq? type otype) (- oend end)]
+         ;; new token
+         [else #f])]
+      [_ #f]))
 
   (define new-next-token
     (infinite-generator
      (define old-tok (old-next-token))
      (define (loop)
        (define tok (next-token))
-       (define new-diff (diff tok old-tok))
        (match-define (token lexeme type data start end mode _) tok)
-       (yield (token lexeme type data start end mode new-diff))
-       (when (eq? new-diff 'new) (loop)))
+
+       (define offset (offset-delta tok old-tok))
+       (yield (token lexeme type data start end mode offset))
+       (when (not offset) (loop)))
      (loop)))
 
   new-next-token)
@@ -230,141 +299,64 @@
   (check-token-transform
    (token-stream-matcher '())
    (list
-    (token #f 'a #f #f #f #f #f)
-    (token #f 'b #f #f #f #f #f)
+    (token #f 'a #f 1 2 #f #f)
+    (token #f 'b #f 2 3 #f #f)
     eof-token)
    (list
-    (token #f 'a #f #f #f #f 'new)
-    (token #f 'b #f #f #f #f 'new)
+    (token #f 'a #f 1 2 #f #f) ; new
+    (token #f 'b #f 2 3 #f #f) ; new
     eof-token))
 
   (check-token-transform
-   (token-stream-matcher (list (token "a" 'a #f #f #f #f #f)
-                               (token "b" 'b #f #f #f #f #f)))
+   (token-stream-matcher (list (token "a" 'a #f 1 2 #f #f)
+                               (token "b" 'b #f 2 3 #f #f)
+                               (token "c" 'c #f 3 4 #f #f)))
    (list
-    (token "a" 'a #f #f #f #f #f)
-    (token "a" 'a #f #f #f #f #f)
-    (token "B" 'b #f #f #f #f #f)
+    (token "a" 'a #f 1 2 #f #f) ; no-change
+    (token "a" 'a #f 2 3 #f #f) ; new
+    (token "B" 'b #f 3 4 #f #f) ; change
+    (token "c" 'c #f 4 5 #f #f) ; no-change
     eof-token)
    (list
-    (token "a" 'a #f #f #f #f 'no-change)
-    (token "a" 'a #f #f #f #f 'new)
-    (token "B" 'b #f #f #f #f 'change)
+    (token "a" 'a #f 1 2 #f 0)
+    (token "a" 'a #f 2 3 #f #f)
+    (token "B" 'b #f 3 4 #f -1)
+    (token "c" 'c #f 4 5 #f -1)
+    eof-token))
+
+  ;; to simplify implementation removal of old tokens is handled
+  ;; in the workspace
+  #;(check-token-transform
+   (token-stream-matcher (list (token "a" 'a #f 1 2 #f #f)
+                               (token "b" 'b #f 2 3 #f #f)
+                               (token "c" 'c #f 3 4 #f #f)))
+   (list
+    (token "a" 'a #f 1 2 #f #f) ; no-change ; deleted
+    (token "c" 'c #f 2 3 #f #f) ; no-change
+    eof-token)
+   (list
+    (token "a" 'a #f 1 2 #f 0)
+    (token "c" 'c #f 2 3 #f -1)
     eof-token)))
 
-;; Reclassifies tokens based on semantic information
-(define ((semantic-reclassifier intervals errors) next-token)
-  (define delta 0)
-  (define error-imap (make-interval-map))
-  (for-each
-   (lambda (e)
-     (match-define (exception _ _ srclocs) e)
-     (for-each
-      (lambda (sl)
-        (match-define (srcloc _ _ _ start span) sl)
-        (interval-map-set! error-imap start (+ start span) span))
-      srclocs))
-   errors)
-
+;; Semantic token reclassifier
+;;
+;; Reclassifies tokens based on semantic information.
+(define ((semantic-reclassifier intervals [old-intervals #f]) next-token)
   (define (new-next-token)
     (match (next-token)
       [(token lexeme (? (curry eq? 'symbol) type) data start end
               (? (lambda (m) (or (eq? m 'racket) (eq? m 'scribble))) mode)
-              diff)
-       (define pos (+ start (floor (/ (- end start) 2))))
-       (match-define-values (err-start err-end err-span)
-                            (interval-map-ref/bounds error-imap start #f))
-       (match-define-values (sem-start sem-end new-data)
-                            (interval-map-ref/bounds intervals start #f))
-       (when sem-end
-         (set! delta (- sem-end end)))
-       (when err-span
-           (set! delta (+ delta err-span)))
-       (token lexeme type new-data start end mode diff)]
-    [token token]))
+              offset)
+       (define pos (if old-intervals
+                       (+ start (or offset 0))
+                       start))
+       (match-define-values
+        (sem-start sem-end new-data)
+        (interval-map-ref/bounds intervals pos #f))
+       (token lexeme type (if new-data new-data data) start end mode offset)]
+      [token token]))
   new-next-token)
-
-(module+ test
-  (require rackunit)
-
-  (define racket-str #<<RACKET
-#lang racket/base
-(define r 10)
-(define pi 3.14)
-(displayln (* 2 pi r))
-RACKET
-)
-
-(check-equal? (take (apply-tokenizer-maker make-tokenizer racket-str) 3)
-              (list
-               (token "#lang racket/base" 'other #f 1 18 'racket #f)
-               (token "\n" 'white-space #f 18 19 'racket #f)
-               (token "(" 'parenthesis '|(| 19 20 'racket #f)))
-
-(define scribble-str #<<SCRIBBLE
-#lang scribble/manual
-@(require (for-label json))
-
-@title{jsonic: because JSON is boring}
-@author{Roxy Lexington}
-
-@defmodulelang[jsonic]
-
-@section{Introduction}
-
-This is a domain-specific language
-that relies on the @racketmodname[json] library.
-
-In particular, the @racket[jsexpr->string] function.
-
-If we start with this:
-
-@verbatim|{
-#lang jsonic
-[
- @$ 'null $@,
- @$ (* 6 7) $@,
- @$ (= 2 (+ 1 1)) $@
- ]
-}|
-
-We'll end up with this:
-
-@verbatim{
-[
- null,
- 42,
- true
- ]
-}
-SCRIBBLE
-  )
-
-(check-equal? (take (apply-tokenizer-maker make-tokenizer scribble-str) 3)
-              (list
-               (token "#lang scribble/manual" 'other #f 1 22 'scribble #f)
-               (token " " 'white-space #f 22 23 'scribble #f)
-               (token "@" 'parenthesis #f 23 24 'scribble #f)))
-
-(define electron-str #<<ELECTRON
-#lang electron
-// comment line
-/* multiline comment */
-module MOD {
-  port PORT
-  net NET
-  OTHERMOD {PORT, OTHERPORT=NET}
-}
-ELECTRON
-  )
-
-(check-equal? (take (apply-tokenizer-maker make-tokenizer electron-str) 3)
-              (list
-               (token "#lang electron" 'other #f 1 15 'other #f)
-               (token "\n" 'no-color #f 15 16 'other #f)
-               (token "// comment line" 'comment #f 16 31 'other #f)))
-)
-
 
 (provide apply-tokenizer-maker make-tokenizer
          token eof-token eof-token? list->producer
