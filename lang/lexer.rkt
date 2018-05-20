@@ -203,11 +203,54 @@
 (define ((token-stream-matcher old-tokens) next-token)
   (define old-next-token (list->producer old-tokens))
 
-  (define (new-next-token)
-    (define tok (next-token))
-    tok)
+  (define (diff tok old-tok)
+    (match-define (token lexeme type _ _ _ _ _) tok)
+    (match old-tok
+      [(token olexeme otype _ _ _ _ _)
+       (cond
+         [(eq? lexeme olexeme) 'no-change]
+         [(eq? type otype) 'change]
+         [else 'new])]
+      [_ 'new]))
+
+  (define new-next-token
+    (infinite-generator
+     (define old-tok (old-next-token))
+     (define (loop)
+       (define tok (next-token))
+       (define new-diff (diff tok old-tok))
+       (match-define (token lexeme type data start end mode _) tok)
+       (yield (token lexeme type data start end mode new-diff))
+       (when (eq? new-diff 'new) (loop)))
+     (loop)))
 
   new-next-token)
+
+(module+ test
+  (check-token-transform
+   (token-stream-matcher '())
+   (list
+    (token #f 'a #f #f #f #f #f)
+    (token #f 'b #f #f #f #f #f)
+    eof-token)
+   (list
+    (token #f 'a #f #f #f #f 'new)
+    (token #f 'b #f #f #f #f 'new)
+    eof-token))
+
+  (check-token-transform
+   (token-stream-matcher (list (token "a" 'a #f #f #f #f #f)
+                               (token "b" 'b #f #f #f #f #f)))
+   (list
+    (token "a" 'a #f #f #f #f #f)
+    (token "a" 'a #f #f #f #f #f)
+    (token "B" 'b #f #f #f #f #f)
+    eof-token)
+   (list
+    (token "a" 'a #f #f #f #f 'no-change)
+    (token "a" 'a #f #f #f #f 'new)
+    (token "B" 'b #f #f #f #f 'change)
+    eof-token)))
 
 ;; Reclassifies tokens based on semantic information
 (define ((semantic-reclassifier intervals errors) next-token)
