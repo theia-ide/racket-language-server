@@ -15,7 +15,7 @@
   (match-define-values (struct-type _) (struct-info e))
   (match-define-values (code _ _ _ _ _ _ _) (struct-type-info struct-type))
   (define msg (exn-message e))
-  (define srclocs ((exn:srclocs-accessor e) e))
+  (define srclocs (if (exn:srclocs? e) ((exn:srclocs-accessor e) e) '()))
   (exception (symbol->string code) msg srclocs))
 
 (define build-trace%
