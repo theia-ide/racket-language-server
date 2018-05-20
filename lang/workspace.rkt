@@ -28,7 +28,7 @@
 
     (define (tokenize text old-tokens)
       (apply-tokenizer-maker
-       (compose lang-tokenizer make-tokenizer)
+       (compose (token-stream-matcher old-tokens) lang-tokenizer make-tokenizer)
        text))
 
     (define (do-change uri text doc-text old-tokens doc-trace worker)

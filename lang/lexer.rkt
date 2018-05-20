@@ -199,6 +199,16 @@
     (token #f 'symbol #f #f #f #f #f)
     eof-token)))
 
+;; Token stream matcher
+(define ((token-stream-matcher old-tokens) next-token)
+  (define old-next-token (list->producer old-tokens))
+
+  (define (new-next-token)
+    (define tok (next-token))
+    tok)
+
+  new-next-token)
+
 ;; Reclassifies tokens based on semantic information
 (define ((semantic-reclassifier intervals errors) next-token)
   (define delta 0)
@@ -315,5 +325,5 @@ ELECTRON
 
 (provide apply-tokenizer-maker make-tokenizer
          token eof-token eof-token? list->producer
-         skip-white lang-tokenizer
+         skip-white lang-tokenizer token-stream-matcher
          sexp-comment-reclassifier semantic-reclassifier)
