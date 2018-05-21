@@ -6,52 +6,60 @@
          "conversion.rkt"
          "lsp.rkt"
          "jsonrpc.rkt"
+         "../lang/document.rkt"
          "../lang/lexer.rkt")
 
-(define (report uri doc-text doc-tokens doc-trace)
-  (when (empty? (send doc-trace get-errors))
-    ;; Skip semantic coloring when there are errors in the trace
-    ;; since that will remove the existing semantic coloring if
-    ;; the previous syntax check was successful.
-    (racket/colorize uri doc-text doc-tokens doc-trace))
-  (text-document/publish-diagnostics uri doc-text doc-tokens doc-trace))
+(define (on-trace doc)
+  (define doc-text (document->text% doc))
+  (racket/colorize doc doc-text)
+  (text-document/publish-diagnostics doc doc-text))
 
-(define (change uri doc-text doc-tokens [doc-trace #f])
-  (racket/colorize uri doc-text doc-tokens doc-trace))
+(define (on-tokenize doc)
+  (define doc-text (document->text% doc))
+  (racket/colorize doc doc-text))
 
 ;; Publish diagnostics notification
-(define (text-document/publish-diagnostics uri doc-text doc-tokens doc-trace)
+(define (text-document/publish-diagnostics doc doc-text)
+  (match-define (traced-document uri _ text _ trace) doc)
+
   (define diagnostics (flatten (map (exception->Diagnostics doc-text)
-                                    (send doc-trace get-diagnostics))))
+                                    (send trace get-diagnostics))))
   (send-notification
    "textDocument/publishDiagnostics"
    (PublishDiagnosticsParams #:uri uri
                              #:diagnostics diagnostics)))
 
 ;; Racket colorize notification
-(define (racket/colorize uri doc-text doc-tokens [doc-trace #f])
-  (define text (send doc-text get-text))
-  (define semantic-colors (if doc-trace
-                              (send doc-trace get-semantic-coloring)
-                              (make-interval-map)))
-  (define errors (if doc-trace
-                     (send doc-trace get-errors)
-                     '()))
+(define last-traced-document #f)
+(define (racket/colorize doc doc-text)
+  (define new-trace (document:trace doc))
+  (when (and new-trace (not (has-syntax-error doc)))
+      (set! last-traced-document doc))
+
   (define next-token
-    (sexp-comment-reclassifier
-     (skip-white
-      ((semantic-reclassifier semantic-colors errors)
-       (list->producer doc-tokens)))))
+    (if last-traced-document
+        ((compose
+         sexp-comment-reclassifier
+         skip-white
+         (semantic-reclassifier
+          (send (document:trace last-traced-document) get-semantic-coloring)
+          #t)
+         (token-stream-matcher (document:tokens last-traced-document)))
+         (list->producer (document:tokens doc)))
+        ((compose
+         sexp-comment-reclassifier
+         skip-white)
+         (list->producer (document:tokens doc)))))
 
   (define tokens
-    (for/list ([tok (in-producer next-token void?)])
+    (for/list ([tok (in-producer next-token eof-token?)])
       (match-define (token text type data start end mode diff) tok)
       (hasheq 'kind (symbol->string (if (and (eq? type 'symbol) data) data type))
               'mode (symbol->string mode)
               'range (pos/pos->Range doc-text (sub1 start) (sub1 end)))))
 
   (send-notification "racket/colorize"
-                     (hasheq 'uri uri
+                     (hasheq 'uri (document:uri doc)
                              'tokens tokens)))
 
-(provide report change)
+(provide on-tokenize on-trace)

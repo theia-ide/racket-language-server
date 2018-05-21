@@ -4,7 +4,8 @@
          racket/list
          data/interval-map
          "conversion.rkt"
-         "lsp.rkt")
+         "lsp.rkt"
+         "../lang/document.rkt")
 
 ;; Mutable variables
 (define already-initialized? #f)
@@ -46,14 +47,14 @@
      #:textDocument (TextDocumentItem #:uri uri
                                       #:text text))
     params)
-  (send ws add-doc uri text))
+  (send ws notify-open uri text))
 
 (define (text-document/did-close ws params)
   (match-define
     (DidCloseTextDocumentParams
      #:textDocument (TextDocumentIdentifier #:uri uri))
     params)
-  (send ws remove-doc uri))
+  (send ws notify-close uri))
 
 (define (text-document/did-change ws params)
   (match-define
@@ -62,7 +63,8 @@
      #:contentChanges content-changes)
     params)
 
-  (define doc-text (send ws get-doc-text uri))
+  (define doc (send ws request uri))
+  (define doc-text (document->text% doc))
   (for ([change (in-list content-changes)])
     (match change
       [(TextDocumentContentChangeEvent
@@ -71,9 +73,9 @@
         #:text text)
        (define st-pos (line/char->pos doc-text st-ln st-ch))
        (define end-pos (+ st-pos range-ln))
-       (send ws update-doc uri text st-pos end-pos)]
+       (send ws notify-update uri text st-pos end-pos)]
       [(TextDocumentContentChangeEvent #:text text)
-       (send ws replace-doc uri text)])))
+       (send ws notify-replace uri text)])))
 
 ;; Text document methods
 (define (text-document/hover ws params)
@@ -82,8 +84,9 @@
      #:textDocument (TextDocumentIdentifier #:uri uri)
      #:position (Position #:line line #:character char))
     params)
-  (define-values (doc-text _ doc-trace) (send ws open-doc uri))
-  (define hovers (send doc-trace get-hovers))
+  (define doc (send ws request-traced uri))
+  (define doc-text (document->text% doc))
+  (define hovers (send (document:trace doc) get-hovers))
   (define pos (line/char->pos doc-text line char))
   (define-values (start end text)
     (interval-map-ref/bounds hovers pos #f))

@@ -6,8 +6,8 @@
          "protocol/notifications.rkt")
 
 (define (main-loop [ws (new workspace%
-                            [change change]
-                            [report report])])
+                            [on-tokenize on-tokenize]
+                            [on-trace on-trace])])
   (define message (read-message))
   (process-message ws message)
   (main-loop ws))

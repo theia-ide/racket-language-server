@@ -96,8 +96,9 @@ ELECTRON
 
 ;; Helpers
 (define (list->producer tokens)
-  (generator ()
-             (for-each yield tokens)))
+  (infinite-generator
+   (for-each yield tokens)
+   (yield eof-token)))
 
 (module+ test
   (check-equal?
@@ -286,6 +287,7 @@ ELECTRON
      (define old-tok (old-next-token))
      (define (loop)
        (define tok (next-token))
+       (when (eof-token? tok) (yield eof-token))
        (match-define (token lexeme type data start end mode _) tok)
 
        (define offset (offset-delta tok old-tok))

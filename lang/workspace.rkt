@@ -9,7 +9,7 @@
 
 (define current-doc-semaphore (make-semaphore 1))
 (struct doc-entry (version doc-text worker))
-(struct current-document (changed tokenized traced traced-no-error))
+(struct current-document (changed tokenized traced))
 
 (define (uri-is-path? str)
   (string-prefix? str "file://"))
@@ -53,18 +53,16 @@
       (call-with-semaphore
        current-doc-semaphore
        (lambda ()
-         (match-define (current-document changed tokenized traced traced-no-error)
+         (match-define (current-document changed tokenized traced)
            (hash-ref current-docs uri))
          (define new-current-document
            (match doc
              [(document _ _ _)
-              (current-document doc tokenized traced traced-no-error)]
+              (current-document doc tokenized traced)]
              [(tokenized-document _ _ _ _)
-              (current-document changed doc traced traced-no-error)]
+              (current-document changed doc traced)]
              [(traced-document _ _ _ _ trace)
-              (if (has-syntax-error doc)
-                  (current-document changed tokenized doc traced-no-error)
-                  (current-document changed tokenized doc doc))]))
+              (current-document changed tokenized doc)]))
          (hash-set! current-docs uri new-current-document))))
 
     ;; Events
@@ -99,7 +97,7 @@
       (unless (uri-is-path? uri)
         (error 'document-symbol "uri is not a path"))
       (define entry (doc-entry 0 (new text%) (start-worker)))
-      (define docs (current-document #f #f #f #f))
+      (define docs (current-document #f #f #f))
       (hash-set! doc-entries (string->symbol uri) entry)
       (hash-set! current-docs (string->symbol uri) docs)
       (update-doc-entry uri
@@ -126,19 +124,19 @@
 
     ;; Request interface
     (define/public (request uri)
-      (match-define (current-document changed _ _ _)
+      (match-define (current-document changed _ _)
         (get-current-doc uri))
       changed)
 
     (define/public (request-tokenized uri)
-      (match-define (current-document _ tokenized _ _)
+      (match-define (current-document _ tokenized _)
         (get-current-doc uri))
       tokenized)
 
     (define/public (request-traced uri)
       (match-define (doc-entry version _ worker)
         (get-doc-entry uri))
-      (match-define (current-document _ _ traced _)
+      (match-define (current-document _ _ traced)
         (get-current-doc uri))
       (if (and traced (eq? (document:version traced) version))
           traced

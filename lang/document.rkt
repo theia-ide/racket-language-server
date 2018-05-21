@@ -2,6 +2,7 @@
 (require racket/class
          racket/list
          racket/match
+         framework
          "check-syntax.rkt"
          "lexer.rkt")
 
@@ -63,5 +64,10 @@
 (define (has-syntax-error doc)
   (match-define (traced-document _ _ _ _ trace) doc)
   (not (empty? (send trace get-errors))))
+
+(define (document->text% doc)
+  (define doc-text (new racket:text%))
+  (send doc-text insert (document:text doc) 0)
+  doc-text)
 
 (provide (all-defined-out))
