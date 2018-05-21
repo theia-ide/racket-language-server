@@ -5,8 +5,7 @@
          racket/set
          data/interval-map
          drracket/check-syntax
-         syntax/modread
-         "worker.rkt")
+         syntax/modread)
 
 (struct exception (code msg srclocs))
 (struct warning (code msg srclocs))
@@ -131,7 +130,7 @@
 (define ((report-error trace) exn)
   (send trace add-error (exn->exception exn)))
 
-(define (check-syntax path text report)
+(define (check-syntax path text)
   (define ns (make-base-namespace))
   (define trace (new build-trace% [path path]))
   (match-define-values (src-dir _ #f)
@@ -148,14 +147,6 @@
                     (λ () (read-syntax text in))))
       (add-syntax (expand stx)))
     (done))
-  (report trace)
   trace)
-
-
-(define (start-check-syntax path report)
-  (define (work msg)
-    (check-syntax path msg report))
-  (define w (make-worker work))
-  w)
 
 (provide (all-defined-out))

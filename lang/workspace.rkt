@@ -1,140 +1,157 @@
 #lang racket/base
 (require racket/class
-         racket/list
+         racket/function
          racket/match
          racket/string
-         framework
-         "check-syntax.rkt"
-         "lexer.rkt"
+         racket/gui/base
+         "document.rkt"
          "worker.rkt")
 
-(struct document (text tokens trace worker))
+(define current-doc-semaphore (make-semaphore 1))
+(struct doc-entry (version doc-text worker))
+(struct current-document (changed tokenized traced traced-no-error))
 
 (define (uri-is-path? str)
   (string-prefix? str "file://"))
 
-(define (uri->path uri)
-  (substring uri 7))
-
 (define workspace%
   (class object%
     (super-new)
-    (init-field change report [docs (make-hasheq)])
+    (init-field
+     [on-change #f]
+     [on-tokenize #f]
+     [on-trace #f]
+     [doc-entries (make-hasheq)]
+     [current-docs (make-hasheq)])
 
-    (define (get-doc uri)
+    (define (get-doc-entry uri)
+      (hash-ref doc-entries (string->symbol uri)))
+
+    (define (get-current-doc uri)
+      (hash-ref current-docs (string->symbol uri)))
+
+    (define (update-doc-entry uri update-procedure)
+      (match-define (doc-entry version doc-text worker) (get-doc-entry uri))
+
+      (update-procedure doc-text)
+
+      (define new-version (add1 version))
+      (define new-text (send doc-text get-text))
+      (define entry (doc-entry new-version doc-text worker))
+      (hash-set! doc-entries (string->symbol uri) entry)
+
+      (define doc (document uri new-version new-text))
+      (emit-on-change doc)
+
+      (define doc-tokenized (make-tokenized-document doc))
+      (emit-on-tokenize doc-tokenized)
+
+      (worker-send worker doc-tokenized))
+
+    (define (update-current-docs doc)
+      (define uri (string->symbol (document:uri doc)))
+      (call-with-semaphore
+       current-doc-semaphore
+       (lambda ()
+         (match-define (current-document changed tokenized traced traced-no-error)
+           (hash-ref current-docs uri))
+         (define new-current-document
+           (match doc
+             [(document _ _ _)
+              (current-document doc tokenized traced traced-no-error)]
+             [(tokenized-document _ _ _ _)
+              (current-document changed doc traced traced-no-error)]
+             [(traced-document _ _ _ _ trace)
+              (if (has-syntax-error doc)
+                  (current-document changed tokenized doc traced-no-error)
+                  (current-document changed tokenized doc doc))]))
+         (hash-set! current-docs uri new-current-document))))
+
+    ;; Events
+    (define (emit doc cb)
+      (update-current-docs doc)
+      (when cb (cb doc)))
+
+    (define/public (set-on-change cb) (set! on-change cb))
+    (define/public (set-on-tokenize cb) (set! on-tokenize cb))
+    (define/public (set-on-trace cb) (set! on-trace cb))
+    (define (emit-on-change doc) (emit doc on-change))
+    (define (emit-on-tokenize doc) (emit doc on-tokenize))
+    (define (emit-on-trace doc) (emit doc on-trace))
+
+    ;; Background thread
+    (define (start-worker)
+      (define (work doc-tokenized)
+        (define doc-traced (make-traced-document doc-tokenized))
+        (emit-on-trace doc-traced)
+        doc-traced)
+      (make-worker work))
+
+    (define (receive-document worker version)
+      (define doc (worker-receive worker #f))
+      (if (>= (document:version doc) version)
+          doc
+          (receive-document worker version)))
+
+
+    ;; Notification interface
+    (define/public (notify-open uri text)
       (unless (uri-is-path? uri)
         (error 'document-symbol "uri is not a path"))
-      (hash-ref docs (string->symbol uri) #f))
+      (define entry (doc-entry 0 (new text%) (start-worker)))
+      (define docs (current-document #f #f #f #f))
+      (hash-set! doc-entries (string->symbol uri) entry)
+      (hash-set! current-docs (string->symbol uri) docs)
+      (update-doc-entry uri
+                        (lambda (doc-text)
+                          (send doc-text insert text 0))))
 
-    (define (tokenize text old-tokens)
-      (apply-tokenizer-maker
-       (compose (token-stream-matcher old-tokens) lang-tokenizer make-tokenizer)
-       text))
-
-    (define (do-change uri text doc-text old-tokens doc-trace worker)
-      ;; Tokenize text
-      (define tokens (tokenize text old-tokens))
-
-      ;; Update document
-      (define doc (document doc-text tokens doc-trace worker))
-      (hash-set! docs (string->symbol uri) doc)
-
-      ;; Send text to worker (make sure this happens after tokenization)
-      (worker-send worker text)
-
-      ;; Emit change event (hide trace and worker)
-      ;; If trace is required the report event should be used.
-      ;; The an OLD trace is provided if AVAILABLE
-      (change uri doc-text tokens doc-trace))
-
-    (define ((do-report uri ws reporter) doc-trace)
-      (match-define (document doc-text doc-tokens _ _) (get-doc uri))
-      (reporter uri doc-text doc-tokens doc-trace))
-
-    (define/public (add-doc uri text)
-      (define doc-text (new racket:text%))
-      (send doc-text insert text 0)
-      (define worker (start-check-syntax
-                      (uri->path uri)
-                      (do-report uri this report)))
-      (do-change uri text doc-text '() #f worker))
-
-    (define/public (remove-doc uri)
-      (match (get-doc uri)
-        [(document _ _ _ worker)
+    (define/public (notify-close uri)
+      (match (get-doc-entry uri)
+        [(doc-entry _ _ worker)
          (kill-worker worker)
-         (hash-remove! docs (string->symbol uri))]
-        [_ #f]))
+         (hash-remove! doc-entries (string->symbol uri))
+         (hash-remove! current-docs (string->symbol uri))]))
 
-    (define/public (update-doc uri text start end)
-      (displayln "updating" (current-error-port))
-      (match (get-doc uri)
-        [(document doc-text doc-tokens doc-trace worker)
-         (send doc-text insert text start end)
+    (define/public (notify-update uri text start end)
+      (update-doc-entry uri
+                        (lambda (doc-text)
+                          (send doc-text insert text start end))))
 
-         (define new-text (send doc-text get-text))
-         (do-change uri new-text doc-text doc-tokens doc-trace worker)]
-        [_ #f]))
+    (define/public (notify-replace uri text)
+      (update-doc-entry uri
+                        (lambda (doc-text)
+                          (send doc-text erase)
+                          (send doc-text insert text 0))))
 
-    (define/public (replace-doc uri text)
-      (match (get-doc uri)
-        [(document doc-text doc-tokens doc-trace worker)
-         (send doc-text erase)
-         (send doc-text insert text 0)
+    ;; Request interface
+    (define/public (request uri)
+      (match-define (current-document changed _ _ _)
+        (get-current-doc uri))
+      changed)
 
-         (do-change uri text doc-text '() doc-trace worker)]
-        [_ #f]))
+    (define/public (request-tokenized uri)
+      (match-define (current-document _ tokenized _ _)
+        (get-current-doc uri))
+      tokenized)
 
-    (define/public (get-doc-text uri)
-      (match (get-doc uri)
-        [(document doc-text _ _ _) doc-text]
-        [_ #f]))
+    (define/public (request-traced uri)
+      (match-define (doc-entry version _ worker)
+        (get-doc-entry uri))
+      (match-define (current-document _ _ traced _)
+        (get-current-doc uri))
+      (if (and traced (eq? (document:version traced) version))
+          traced
+          (receive-document worker version)))
 
-    ;; Always returns the most recent available trace.
-    ;; If non is available it will block and memoize the result.
-    (define/public (get-doc-trace uri)
-      (match (get-doc uri)
-        [(document doc-text doc-tokens doc-trace worker)
-         (define new-doc-trace (worker-receive worker doc-trace))
-         (define errors (send new-doc-trace get-errors))
-         ;; Update the doc-trace when there isn't one yet
-         ;; or it's error free. Otherwise add the errors
-         ;; to the old doc-trace.
-         (if (or (not doc-trace) (empty? errors))
-             (begin
-               (hash-set! docs (string->symbol uri)
-                          (document doc-text doc-tokens new-doc-trace worker))
-               new-doc-trace)
-             (begin
-               (for-each (lambda (e)
-                           (send doc-trace add-error e))
-                         errors)
-               doc-trace))]
-        [_ #f]))
+    ))
 
-    (define/public (get-doc-tokens uri)
-      (match (get-doc uri)
-        [(document _ doc-tokens _ _) doc-tokens]
-        [_ #f]))
-
-    (define/public (open-doc-text uri)
-      (define doc-text (get-doc-text uri))
-      (if doc-text (send doc-text get-text) #f))
-
-    (define/public (open-doc uri)
-      (define doc-text (get-doc-text uri))
-      (define doc-tokens (get-doc-tokens uri))
-      (define doc-trace (get-doc-trace uri))
-      (values doc-text doc-tokens doc-trace))
-
-  ))
+(provide workspace%)
 
 (module+ test
   (require rackunit)
 
-  (define ws (new workspace%
-                  [change (lambda (uri doc-text doc-tokens [doc-trace #f]) #f)]
-                  [report (lambda (uri doc-text doc-tokens doc-trace) #f)]))
+  (define ws (new workspace%))
 
   (define uris '("file:///home/user/file.txt"
                  "file:///home/user/other.txt"))
@@ -148,21 +165,45 @@
 
   (define texts (map syntax->text syntaxes))
 
-  (check-equal? (send ws open-doc-text (car uris)) #f)
+  (define (check-document doc curi cversion ctext)
+    (match-define (document uri version text) doc)
+    (check-equal? uri curi)
+    (check-equal? version cversion)
+    (check-equal? text ctext))
 
-  (send ws add-doc (car uris) (car texts))
-  (check-equal? (send ws open-doc-text (car uris)) (car texts))
+  (define (check-tokenized-document doc curi cversion ctext)
+    (match-define (tokenized-document uri version text _) doc)
+    (check-equal? uri curi)
+    (check-equal? version cversion)
+    (check-equal? text ctext))
 
-  (send ws replace-doc (car uris) (car (cdr texts)))
-  (check-equal? (send ws open-doc-text (car uris)) (car (cdr texts)))
+  (define (check-traced-document doc curi cversion ctext)
+    (match-define (traced-document uri version text _ _) doc)
+    (check-equal? uri curi)
+    (check-equal? version cversion)
+    (check-equal? text ctext))
 
-  (check-true (is-a? (send ws get-doc-text (car uris)) racket:text%))
-  (check-true (list? (send ws get-doc-tokens (car uris))))
-  (check-true (is-a? (send ws get-doc-trace (car uris)) build-trace%))
+  (define (register-checks ws curi cversion ctext)
+    (send ws set-on-change
+          (lambda (doc) (check-document doc curi cversion ctext)))
+    (send ws set-on-tokenize
+          (lambda (doc) (check-tokenized-document doc curi cversion ctext)))
+    (send ws set-on-trace
+          (lambda (doc) (check-traced-document doc curi cversion ctext))))
 
-  (send ws remove-doc (car uris))
-  (check-equal? (send ws open-doc-text (car uris)) #f)
+  (define (check-notify ws method uri version text)
+    (register-checks ws uri version text)
+    (dynamic-send ws method uri text)
+    (check-document (send ws request uri) uri version text)
+    (check-tokenized-document (send ws request-tokenized uri) uri version text)
+    (check-traced-document (send ws request-traced uri) uri version text))
 
+  (check-notify ws 'notify-open (car uris) 1 (car texts))
+  (check-notify ws 'notify-open (car (cdr uris)) 1 (car (cdr texts)))
+  (check-notify ws 'notify-replace (car uris) 2 (car (cdr texts)))
+
+  (send ws notify-close (car uris))
+  (send ws notify-close (car (cdr uris)))
   )
 
 (provide workspace%)
