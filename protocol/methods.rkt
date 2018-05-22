@@ -5,7 +5,8 @@
          data/interval-map
          "conversion.rkt"
          "lsp.rkt"
-         "../lang/document.rkt")
+         "../lang/document.rkt"
+         "../lang/lexer.rkt") ; for token
 
 ;; Mutable variables
 (define already-initialized? #f)
@@ -27,7 +28,8 @@
             #:willSave #f
             #:willSaveWaitUntil #f
             #:save #f)
-           'hoverProvider #t)))
+           'hoverProvider #t
+           'documentSymbolProvider #t)))
 
 (define (lsp/initialized ws params) #f)
 
@@ -95,5 +97,40 @@
       (Hover #:contents text
              #:range (pos/pos->Range doc-text start end))
       'null))
+
+(define (text-document/document-symbol ws params)
+  (match-define
+    (TextDocumentSymbolParams
+     #:textDocument (TextDocumentIdentifier #:uri uri))
+    params)
+  (define doc (send ws request-tokenized uri))
+  (define doc-text (document->text% doc))
+  (define filtered-tokens
+    (filter
+     (lambda (tok)
+       (match-define (token lexeme type data start end mode diff) tok)
+       (match type
+         ['constant #t]
+         ['string #t]
+         ['symbol #t]
+         [_ #f]))
+     (document:tokens doc)))
+  (map
+   (lambda (tok)
+     (match-define (token lexeme type data start end mode diff) tok)
+     (SymbolInformation
+      #:name lexeme
+      #:kind (match type
+               ['constant SymbolKindConstant]
+               ['string SymbolKindString]
+               ['symbol SymbolKindVariable])
+      #:location
+      (Location
+       #:uri uri
+       #:range
+       (Range
+        #:start (pos->Position doc-text (sub1 start))
+        #:end (pos->Position doc-text (sub1 end))))))
+     filtered-tokens))
 
 (provide (all-defined-out))

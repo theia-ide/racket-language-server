@@ -174,4 +174,42 @@
   [contents string?]
   [range any/c])
 
+;; TextDocumentSymbolParams
+(define-json-expander TextDocumentSymbolParams
+  [textDocument any/c])
+
+;; SymbolInformation
+(define-json-expander SymbolInformation
+  [name string?]
+  [kind exact-nonnegative-integer?]
+  [location any/c])
+
+;; SymbolKind
+(define SymbolKindFile 1)
+(define SymbolKindModule 2)
+(define SymbolKindNamespace 3)
+(define SymbolKindPackage 4)
+(define SymbolKindClass 5)
+(define SymbolKindMethod 6)
+(define SymbolKindProperty 7)
+(define SymbolKindField 8)
+(define SymbolKindConstructor 9)
+(define SymbolKindEnum 10)
+(define SymbolKindInterface 11)
+(define SymbolKindFunction 12)
+(define SymbolKindVariable 13)
+(define SymbolKindConstant 14)
+(define SymbolKindString 15)
+(define SymbolKindNumber 16)
+(define SymbolKindBoolean 17)
+(define SymbolKindArray 18)
+(define SymbolKindObject 19)
+(define SymbolKindKey 20)
+(define SymbolKindNull 21)
+(define SymbolKindEnumMember 22)
+(define SymbolKindStruct 23)
+(define SymbolKindEvent 24)
+(define SymbolKindOperator 25)
+(define SymbolKindTypeParameter 26)
+
 (provide (all-defined-out))
