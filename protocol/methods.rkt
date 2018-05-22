@@ -31,6 +31,7 @@
             #:willSaveWaitUntil #f
             #:save #f)
            'hoverProvider #t
+           'definitionProvider #t
            'documentSymbolProvider #t
            'documentLinkProvider #t
            'documentFormattingProvider #t
@@ -102,6 +103,27 @@
       (Hover #:contents text
              #:range (pos/pos->Range doc-text start end))
       'null))
+
+(define (text-document/definition ws params)
+  (match-define
+    (TextDocumentPositionParams
+     #:textDocument (TextDocumentIdentifier #:uri uri)
+     #:position (Position #:line line #:character char))
+    params)
+  (define doc (send ws request-traced uri))
+  (define doc-text (document->text% doc))
+  (define bindings (send (document:trace doc) get-bindings))
+  (define pos (line/char->pos doc-text line char))
+  (define declaration (interval-map-ref bindings pos #f))
+  (match declaration
+    [#f 'null]
+    [(binding start end type)
+     (Location
+      #:uri uri
+      #:range
+      (Range
+       #:start (pos->Position doc-text start)
+       #:end (pos->Position doc-text end)))]))
 
 (define (text-document/document-symbol ws params)
   (match-define

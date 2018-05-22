@@ -32,6 +32,7 @@
     ["initialize" (execute lsp/initialize)]
     ["shutdown" (execute lsp/shutdown)]
     ["textDocument/hover" (execute text-document/hover)]
+    ["textDocument/definition" (execute text-document/definition)]
     ["textDocument/documentSymbol" (execute text-document/document-symbol)]
     ["textDocument/documentLink" (execute text-document/document-link)]
     ["textDocument/formatting" (execute text-document/formatting)]
