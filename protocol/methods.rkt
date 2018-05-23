@@ -6,6 +6,7 @@
          "conversion.rkt"
          "lsp.rkt"
          "../lang/document.rkt"
+         "../lang/check-syntax.rkt"
          "../lang/lexer.rkt") ; for token
 
 ;; Mutable variables
@@ -29,7 +30,8 @@
             #:willSaveWaitUntil #f
             #:save #f)
            'hoverProvider #t
-           'documentSymbolProvider #t)))
+           'documentSymbolProvider #t
+           'documentLinkProvider #t)))
 
 (define (lsp/initialized ws params) #f)
 
@@ -127,10 +129,27 @@
       #:location
       (Location
        #:uri uri
-       #:range
-       (Range
-        #:start (pos->Position doc-text (sub1 start))
-        #:end (pos->Position doc-text (sub1 end))))))
+       #:range (pos/pos->Range doc-text (sub1 start) (sub1 end)))))
      filtered-tokens))
+
+(define (text-document/document-link ws params)
+  (match-define
+    (DocumentLinkParams
+     #:textDocument (TextDocumentIdentifier #:uri uri))
+    params)
+  (define doc (send ws request-traced uri))
+  (define doc-text (document->text% doc))
+  (define document-links
+    (append
+     (send (document:trace doc) get-require-locations)
+     (send (document:trace doc) get-documentation)))
+
+  (map
+   (lambda (ln)
+     (match-define (link start end target) ln)
+     (DocumentLink
+      #:range (pos/pos->Range doc-text start end)
+      #:target target))
+   document-links))
 
 (provide (all-defined-out))

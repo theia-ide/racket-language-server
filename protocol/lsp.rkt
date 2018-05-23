@@ -212,4 +212,13 @@
 (define SymbolKindOperator 25)
 (define SymbolKindTypeParameter 26)
 
+;; DocumentLinkParams
+(define-json-expander DocumentLinkParams
+  [textDocument any/c])
+
+;; DocumentLink
+(define-json-expander DocumentLink
+  [range any/c]
+  [target string?])
+
 (provide (all-defined-out))

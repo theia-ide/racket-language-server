@@ -10,6 +10,7 @@
 (struct warning (code msg srclocs) #:transparent)
 (struct binding (start end require?) #:transparent)
 (struct reference (filename id) #:transparent)
+(struct link (start end file))
 
 (define (exn->exception e)
   (match-define-values (struct-type _) (struct-info e))
@@ -29,8 +30,8 @@
     (define bindings (make-interval-map))
     (define definitions (make-hasheq))
     (define references (make-interval-map))
-    (define require-locations (make-interval-map))
-    (define documentation (make-interval-map))
+    (define require-locations empty)
+    (define documentation empty)
     (define tails (make-hasheq))
 
     ;; Getters
@@ -107,14 +108,17 @@
 
     (define/override (syncheck:add-require-open-menu
                       _text start-pos end-pos file)
-      (interval-map-set! require-locations start-pos end-pos file)
+      (set! require-locations
+            (cons (link start-pos end-pos
+                        (string-append "file://" (path->string file)))
+                  require-locations))
       void)
 
     (define/override (syncheck:add-docs-menu
                       _text start-pos end-pos key the-label path
                       definition-tag tag)
       (define doc-uri (format "file://~a#~a" path tag))
-      (interval-map-set! documentation start-pos end-pos doc-uri)
+      (set! documentation (cons (link start-pos end-pos doc-uri) documentation))
       void)
 
     (define/override (syncheck:add-prefixed-require-reference
