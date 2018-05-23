@@ -1,8 +1,8 @@
 #lang racket/base
 (require racket/class
+         racket/gui/base
          racket/list
          racket/match
-         framework
          "check-syntax.rkt"
          "lexer.rkt")
 
@@ -66,7 +66,7 @@
   (not (empty? (send trace get-errors))))
 
 (define (document->text% doc)
-  (define doc-text (new racket:text%))
+  (define doc-text (new text%))
   (send doc-text insert (document:text doc) 0)
   doc-text)
 
