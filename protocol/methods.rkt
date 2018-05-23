@@ -7,6 +7,7 @@
          "lsp.rkt"
          "../lang/document.rkt"
          "../lang/check-syntax.rkt"
+         "../lang/indent.rkt"
          "../lang/lexer.rkt") ; for token
 
 ;; Mutable variables
@@ -31,7 +32,9 @@
             #:save #f)
            'hoverProvider #t
            'documentSymbolProvider #t
-           'documentLinkProvider #t)))
+           'documentLinkProvider #t
+           'documentFormattingProvider #t
+           'documentRangeFormattingProvider #t)))
 
 (define (lsp/initialized ws params) #f)
 
@@ -151,5 +154,34 @@
       #:range (pos/pos->Range doc-text start end)
       #:target target))
    document-links))
+
+(define (text-document/formatting ws params)
+  (match-define
+    (DocumentFormattingParams
+     #:textDocument (TextDocumentIdentifier #:uri uri))
+    params)
+  (define doc (send ws request uri))
+  (define doc-text (document->text% doc))
+  (list
+   (TextEdit
+    #:range (pos/pos->Range doc-text 0 (string-length (document:text doc)))
+    #:newText (indent (document:text doc)))))
+
+;; Document Range Formatting request
+(define (text-document/range-formatting ws params)
+  (match-define
+    (DocumentRangeFormattingParams
+     #:textDocument (TextDocumentIdentifier #:uri uri)
+     #:range (Range #:start (Position #:line start-ln #:character start-ch)
+                    #:end (Position #:line end-ln #:character end-ch)))
+    params)
+  (define doc (send ws request uri))
+  (define doc-text (document->text% doc))
+  (define start (line/char->pos doc-text start-ln start-ch))
+  (define end (line/char->pos doc-text end-ln end-ch))
+  (list
+   (TextEdit
+    #:range (pos/pos->Range doc-text 0 (string-length (document:text doc)))
+    #:newText (indent (document:text doc) start end))))
 
 (provide (all-defined-out))

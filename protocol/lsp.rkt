@@ -221,4 +221,20 @@
   [range any/c]
   [target string?])
 
+;; DocumentFormattingParams
+(define-json-expander DocumentFormattingParams
+  [textDocument any/c]
+  [options any/c])
+
+;; DocumentRangeFormattingParams
+(define-json-expander DocumentRangeFormattingParams
+  [textDocument any/c]
+  [range any/c]
+  [options any/c])
+
+;; FormattingOptions
+(define-json-expander FormattingOptions
+  [tabSize exact-nonnegative-integer?]
+  [insertSpaces boolean?])
+
 (provide (all-defined-out))
