@@ -167,7 +167,6 @@
     #:range (pos/pos->Range doc-text 0 (string-length (document:text doc)))
     #:newText (indent (document:text doc)))))
 
-;; Document Range Formatting request
 (define (text-document/range-formatting ws params)
   (match-define
     (DocumentRangeFormattingParams
@@ -183,5 +182,13 @@
    (TextEdit
     #:range (pos/pos->Range doc-text 0 (string-length (document:text doc)))
     #:newText (indent (document:text doc) start end))))
+
+(define (racket/indent ws params)
+  (match-define
+    (hash-table ['textDocument (TextDocumentIdentifier #:uri uri)]
+                ['line line])
+    params)
+  (define doc (send ws request uri))
+  (compute-amount-to-indent (document:text doc) line))
 
 (provide (all-defined-out))

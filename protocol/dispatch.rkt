@@ -36,6 +36,7 @@
     ["textDocument/documentLink" (execute text-document/document-link)]
     ["textDocument/formatting" (execute text-document/formatting)]
     ["textDocument/rangeFormatting" (execute text-document/range-formatting)]
+    ["racket/indent" (execute racket/indent)]
     [_ (send-method-not-found-error id method)]))
 
 (define (process-notification state method params)
