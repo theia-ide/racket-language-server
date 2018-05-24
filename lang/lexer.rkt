@@ -1,22 +1,49 @@
-#lang racket/base
-(require racket/function
+#lang at-exp racket/base
+
+(require racket/contract/base
+         racket/function
          racket/generator
          racket/match
          racket/list
          data/interval-map
+         scribble/srcdoc
          syntax-color/module-lexer
          syntax-color/racket-lexer
          syntax-color/scribble-lexer
          "check-syntax.rkt") ; for exception
 
+(require (for-doc racket/base scribble/manual))
+
 (module+ test
   (require rackunit))
 
 ;; Definitions
-(struct token (lexeme type data start end mode diff) #:transparent)
+(provide
+ (struct-doc
+  token
+  ([lexeme (or/c string? eof-object?)]
+   [type (or/c symbol? false/c)]
+   [data any/c]
+   [start (or/c exact-nonnegative-integer? false/c)]
+   [end (or/c exact-nonnegative-integer? false/c)]
+   [mode (or/c (one-of/c 'racket 'scribble 'other) false/c)]
+   [offset (or/c exact-integer? false/c)])
+  @{This @racket[struct] represents a @racket[token].}))
+(struct token (lexeme type data start end mode offset) #:transparent)
 
+(provide
+ (thing-doc
+  eof-token
+  (struct/c token eof-object? false/c false/c false/c false/c false/c false/c)
+  @{An alias for a @racket[token] with the lexeme set to @racket[eof].}))
 (define eof-token (token eof #f #f #f #f #f #f))
 
+(provide
+ (proc-doc/names
+  eof-token?
+  (-> any/c boolean?)
+  (tok)
+  @{Determines whether a @racket[token] is an @racket[eof-token].}))
 (define (eof-token? tok)
   (match tok
     [(token (? eof-object?) _ _ _ _ _ _) #t]
@@ -24,6 +51,12 @@
 
 
 ;; Lexer
+(provide
+ (proc-doc/names
+  get-lexer
+  (-> input-port? (-> struct?))
+  (in)
+  @{Returns a @racket[token] @racket[producer] for an @racket[input-port].}))
 (define (get-lexer in)
   (define offset 0)
   (define mode #f)
@@ -36,11 +69,24 @@
     (token lexeme type data start end (mode->symbol mode) #f))
   next-token)
 
+(provide
+ (proc-doc/names
+  make-tokenizer
+  (-> string? (-> struct?))
+  (str)
+  @{Returns a @racket[token] @racket[producer] for an input @racket[string].}))
 (define (make-tokenizer str)
   (define input-port (open-input-string str))
   (port-count-lines! input-port)
   (get-lexer input-port))
 
+(provide
+ (proc-doc/names
+  apply-tokenizer-maker
+  (-> (-> string? (-> struct?)) string? (listof struct?))
+  (tokenizer val)
+  @{Applies a tokenizer to a @racket[string] and returns a @racket[list] of
+    @racket[token]s.}))
 (define (apply-tokenizer-maker tokenizer val)
   (define next-token (tokenizer val))
   (for/list ([tok (in-producer next-token eof-token?)])
@@ -95,6 +141,12 @@ ELECTRON
 )
 
 ;; Helpers
+(provide
+ (proc-doc/names
+  list->producer
+  (-> (listof struct?) generator?)
+  (tokens)
+  @{Returns a @racket[producer] for a @racket[list] of @racket[token]s.}))
 (define (list->producer tokens)
   (infinite-generator
    (for-each yield tokens)
@@ -141,6 +193,14 @@ ELECTRON
 ;;
 ;; Splits 'other tokens starting with #lang into a 'lang-keyword
 ;; and 'lang-symbol token.
+(provide
+ (proc-doc/names
+  lang-tokenizer
+  (-> (-> struct?) (-> struct?))
+  (next-token)
+  @{Transforms tokens with type @racket['other] that contain a @bold{#lang}
+    declaration into a @racket['keyword], @racket['white-space] and
+    @racket['symbol] @racket[token].}))
 (define (lang-tokenizer next-token)
   (infinite-generator
    (define tok (next-token))
@@ -171,6 +231,14 @@ ELECTRON
 ;; Skip whitespace
 ;;
 ;; Skips white space tokens in token stream.
+(provide
+ (proc-doc/names
+  skip-white
+  (-> (-> struct?) (-> struct?))
+  (next-token)
+  @{Takes a @racket[token] producer and returns a new @racket[token] producer
+    that ignores @racket[token]s with type @racket['white-space] and
+    @racket['whitespace].}))
 (define (skip-white next-token)
   (define (new-next-token)
     (match (next-token)
@@ -199,6 +267,14 @@ ELECTRON
 ;;
 ;; Counts parenthesis and reclassifies the tokens of the sexp after
 ;; 'sexp-comment to 'comment.
+(provide
+ (proc-doc/names
+  sexp-comment-reclassifier
+  (-> (-> struct?) (-> struct?))
+  (next-token)
+  @{Counts parenthesis and reclassifies @racket[token]s after a
+    @racket['sexp-comment] @racket[token]s into @racket['comment]
+    @racket[token]s.}))
 (define (sexp-comment-reclassifier next-token)
   (define (is-open paren)
     (or (eq? paren '|(|) (eq? paren '|{|) (eq? paren '|[|)))
@@ -267,6 +343,13 @@ ELECTRON
 ;;
 ;; Matches a token stream to an old list of tokens and
 ;; sets the offset into the old token stream.
+(provide
+ (proc-doc/names
+  token-stream-matcher
+  (-> (listof struct?) (-> (-> struct?) (-> struct?)))
+  (old-tokens)
+  @{Matches a @racket[token] producer to an old @racket[list] of @racket[token]s
+    and sets the offset field.}))
 (define ((token-stream-matcher old-tokens) next-token)
   (define old-next-token (list->producer old-tokens))
   (define offset 0)
@@ -344,6 +427,14 @@ ELECTRON
 ;; Semantic token reclassifier
 ;;
 ;; Reclassifies tokens based on semantic information.
+(provide
+ (proc-doc/names
+  semantic-reclassifier
+  (->* (interval-map?) (boolean?) (-> (-> struct?) (-> struct?)))
+  ((intervals) ((old-intervals #f)))
+  @{Set's data field in a @racket[token] using an @racket[interval-map]. If
+    old-intervals is @racket[#t] it will use the @racket[token]'s offset
+    for lookup.}))
 (define ((semantic-reclassifier intervals [old-intervals #f]) next-token)
   (define (new-next-token)
     (match (next-token)
@@ -359,8 +450,3 @@ ELECTRON
        (token lexeme type (if new-data new-data data) start end mode offset)]
       [token token]))
   new-next-token)
-
-(provide apply-tokenizer-maker make-tokenizer
-         token eof-token eof-token? list->producer
-         skip-white lang-tokenizer token-stream-matcher
-         sexp-comment-reclassifier semantic-reclassifier)

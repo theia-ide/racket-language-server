@@ -1,5 +1,6 @@
 #lang scribble/manual
-@(require (for-label racket))
+@(require scribble/extract
+          (for-label racket))
 
 @title{Racket Language Server}
 @author{David Craven}
@@ -120,6 +121,18 @@ interface RacketIndentParams {
   @item{error: code and message set in case an exception happens during the
   definition request.}
 }
+
+@section[#:tag "api"]{Application Programming Interface}
+The codebase is split in two folders, `lang` which provides Racket language
+support procedures that extract and combine information from drracket and other
+sources and `protocol` which converts the information to the Language Server
+Protocol.
+
+@subsection[#:tag "lang"]{Language support}
+@declare-exporting[racket-language-server/lang/lexer racket-language-server]
+@include-extracted["../lang/lexer.rkt"]
+
+@subsection[#:tag "protocol"]{Protocol}
 
 @section[#:tag "references"]{References}
 
