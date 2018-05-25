@@ -13,3 +13,5 @@
                      "racket-doc"
                      "rackunit-lib"
                      "scribble-lib"))
+(define racket-launcher-libraries '("main.rkt"))
+(define racket-launcher-names '("racket-language-server"))
