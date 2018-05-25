@@ -1,4 +1,4 @@
-# Racket Language Server
+# Racket Language Server [![Build Status](https://travis-ci.org/theia-ide/racket-language-server.svg?branch=master)](https://travis-ci.org/theia-ide/racket-language-server)
 
 Implementation of the
 [Language Server Protocol](https://microsoft.github.io/language-server-protocol/specification)
