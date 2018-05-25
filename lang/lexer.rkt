@@ -121,7 +121,9 @@ SCRIBBLE
                (token " " 'white-space #f 22 23 'scribble #f)
                (token "@" 'parenthesis #f 23 24 'scribble #f)))
 
-(define electron-str #<<ELECTRON
+;; Disable electron dsl tests in CI
+(when (not (getenv "CI"))
+  (define electron-str #<<ELECTRON
 #lang electron
 // comment line
 /* multiline comment */
@@ -133,11 +135,11 @@ module MOD {
 ELECTRON
   )
 
-(check-equal? (take (apply-tokenizer-maker make-tokenizer electron-str) 3)
-              (list
-               (token "#lang electron" 'other #f 1 15 'other #f)
-               (token "\n" 'no-color #f 15 16 'other #f)
-               (token "// comment line" 'comment #f 16 31 'other #f)))
+  (check-equal? (take (apply-tokenizer-maker make-tokenizer electron-str) 3)
+                (list
+                 (token "#lang electron" 'other #f 1 15 'other #f)
+                 (token "\n" 'no-color #f 15 16 'other #f)
+                 (token "// comment line" 'comment #f 16 31 'other #f))))
 )
 
 ;; Helpers

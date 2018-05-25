@@ -69,9 +69,11 @@ ELECTRON
    (string-indents (indent racket-str))
    '(#f #f 1 2 3 4))
 
-  (check-equal?
-   (string-indents (indent electron-str))
-   '(#f #f #f #f 2 2 2 #f)))
+  ;; Disable electron dsl tests in CI
+  (when (not (getenv "CI"))
+    (check-equal?
+     (string-indents (indent electron-str))
+     '(#f #f #f #f 2 2 2 #f))))
 
 (define (compute-amount-to-indent text line)
   (define tbox (string->indent:text% text))
@@ -82,7 +84,9 @@ ELECTRON
   (check-equal?
    (compute-amount-to-indent racket-str 2) 1)
 
-  (check-equal?
-   (compute-amount-to-indent electron-str 4) 2))
+  ;; Disable electron dsl tests in CI
+  (when (not (getenv "CI"))
+    (check-equal?
+     (compute-amount-to-indent electron-str 4) 2)))
 
 (provide indent compute-amount-to-indent)
