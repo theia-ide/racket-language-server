@@ -26,7 +26,7 @@
    [data any/c]
    [start (or/c exact-nonnegative-integer? false/c)]
    [end (or/c exact-nonnegative-integer? false/c)]
-   [mode (or/c (one-of/c 'racket 'scribble 'other) false/c)]
+   [mode (or/c (one-of/c 'racket 'scribble 'lang 'other) false/c)]
    [offset (or/c exact-integer? false/c)])
   @{This @racket[struct] represents a @racket[token].}))
 (struct token (lexeme type data start end mode offset) #:transparent)
