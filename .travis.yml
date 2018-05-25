@@ -1,0 +1,33 @@
+language: c
+sudo: false
+
+env:
+  global:
+    - RACKET_DIR=~/racket
+    - PACKAGE_NAME=racket-language-server
+  matrix:
+    - RACKET_VERSION=6.12
+
+before_install:
+  - git clone https://github.com/greghendershott/travis-racket.git
+  - cat travis-racket/install-racket.sh | bash
+  - export PATH="${RACKET_DIR}/bin:${PATH}"
+
+script:
+  - raco pkg install --deps search-auto
+  - raco setup --check-pkg-deps $PACKAGE_NAME
+  - raco make main.rkt
+  - raco test -p $PACKAGE_NAME
+
+before_deploy:
+  - raco exe -o $PACKAGE_NAME main.rkt
+  - raco distribute dist $PACKAGE_NAME
+  - cd dist/ && tar -zcvf ../racket-language-server.tar.gz . && cd ..
+
+deploy:
+  provider: releases
+  api_key:
+    secure: V45Opi6Z/tFyvvYqTBAXzrRPHVGkKTj0pJcSfTXocvn2sotwTpN+AqC8pqf/11s3XHw1i4eEaJLM9czyGUWUVz7txn9RTTFqc4H5ZjN0KDDzXsyoKhhfgnpFo5XFPf4zyapmLn8EbXn7FTSg3Sirbltvo5aIwyrglsbrBnGwbcIn1eNvbUKsCnEFDlH+kyDiOgL40V9vRbWWL6Kdn0D18ooRqqfo4N5rNxmPP/RypwMS0PviFwBJ7yvcoD4jgAJdIGd+tDMeBwFaj1DK5sSv3qrf641kx54jpi2e6zVOhKDKR4bdQ32KXcCtMeE8XFuovoER5fXlzxJrQ78W0PjdXAoAmc0DGOIF6TRVaXcpsiqMbUWwUiXLJFwseXlxV8U/k0af4C86D5ywzbndkYkJynJ1xBbtDrTw1hRZFXDFtTgMFDex22oKAURW7DoC8AZL+9+CG+T61lYVjAWElJH/+edjx70Cf45SeEWjnoJTwxb+gRLDva8r6VYg48xoY+tQ8U37ahRFk9gAa6NWe4RzRyRkQ8698jsUYnPKWJJJ+oMf3rIlSFjhllMUhD1D69tS9MQAv1h0eQ2h1NgQXC/GUfj3yaZCNKKzFn0CAcicO+tAXzWNlzOEF02vd3MSeYD3bXj+tdfFTbN9nnTyD1oEssr2hgwOlYWYaRJCftT6zFg=
+  file: racket-language-server.tar.gz
+  on:
+    tags: true
