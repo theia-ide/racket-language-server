@@ -6,7 +6,10 @@
                "data-lib"
                "drracket-tool-lib"
                "gui-lib"
+               "scribble-lib"
                "syntax-color-lib"))
-(define build-deps '("racket-doc"
+(define build-deps '("at-exp-lib"
+                     "data-doc"
+                     "racket-doc"
                      "rackunit-lib"
                      "scribble-lib"))
