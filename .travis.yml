@@ -19,7 +19,7 @@ script:
   - raco pkg install --deps search-auto
   - raco setup --check-pkg-deps $PACKAGE_NAME
   - raco make main.rkt
-  - raco test -p $PACKAGE_NAME
+  - xvfb-run raco test -p $PACKAGE_NAME
 
 before_deploy:
   - raco exe -o $PACKAGE_NAME main.rkt
