@@ -152,13 +152,16 @@
 (define (check-syntax path text)
   (define ns (make-base-namespace))
   (define trace (new build-trace% [src path]))
+  (match-define-values (load-dir _ #f)
+                       (split-path path))
 
   (parameterize ([current-annotations trace])
     (define-values (expanded-expression expansion-completed)
       (make-traversal ns path))
     (define port (open-input-string text))
     (port-count-lines! port)
-    (parameterize ([current-namespace ns])
+    (parameterize ([current-namespace ns]
+                   [current-load-relative-directory load-dir])
       (with-handlers ([exn? (report-error trace)])
         (expanded-expression
          (expand
