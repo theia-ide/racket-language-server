@@ -16,7 +16,7 @@
       (and (exact-positive-integer? len) len)))
 
   (define racket-str #<<RACKET
-#lang racket/base
+#lang at-exp racket/base
 (a
 (b
 (c
@@ -37,20 +37,24 @@ OTHERMOD {PORT, OTHERPORT=NET}
 ELECTRON
     ))
 
+(define (default-indenter tbox [posn 0])
+  #f)
+
 (define (get-info input symbol default)
   (define input-port (if (string? input) (open-input-string input) input))
   ((read-language input-port) symbol default))
 
 (define (get-indenter text)
-  (with-handlers ([exn? (lambda (e) #f)])
+  (with-handlers ([exn? (lambda (e) default-indenter)])
     (get-info text 'drracket:indentation #f)))
 
 (define indent:text%
   (class racket:text%
-    (init-field indenter)
+    (init-field [indenter default-indenter])
     (define/augment (compute-amount-to-indent [posn 0])
-      (if indenter
-          (indenter this posn)
+      (define res (indenter this posn))
+      (if res
+          res
           (send this compute-racket-amount-to-indent posn)))
     (super-new)))
 
