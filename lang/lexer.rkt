@@ -21,7 +21,7 @@
 (provide
  (struct-doc
   token
-  ([lexeme (or/c string? eof-object?)]
+  ([lexeme any/c]
    [type (or/c symbol? false/c)]
    [data any/c]
    [start (or/c exact-nonnegative-integer? false/c)]
@@ -113,13 +113,30 @@ RACKET
 #lang scribble/manual
 @(require (for-label json))
 SCRIBBLE
-  )
+)
 
 (check-equal? (take (apply-tokenizer-maker make-tokenizer scribble-str) 3)
               (list
                (token "#lang scribble/manual" 'other #f 1 22 'scribble #f)
                (token " " 'white-space #f 22 23 'scribble #f)
                (token "@" 'parenthesis #f 23 24 'scribble #f)))
+
+(define atexp-str #<<ATEXP
+#lang at-exp racket/base
+(provide
+ (thing-doc
+  constant
+  any/c?
+  @{Defines a constant.}))
+(define constant #f)
+ATEXP
+)
+
+(check-equal? (take (apply-tokenizer-maker make-tokenizer atexp-str) 3)
+              (list
+               (token "#lang at-exp racket/base" 'other #f 1 25 'other #f)
+               (token "\n" 'white-space #f 25 26 'other #f)
+               (token "(" 'parenthesis '|(| 26 27 'other #f)))
 
 ;; Disable electron dsl tests in CI
 (when (not (getenv "CI"))
@@ -440,9 +457,7 @@ ELECTRON
 (define ((semantic-reclassifier intervals [old-intervals #f]) next-token)
   (define (new-next-token)
     (match (next-token)
-      [(token lexeme (? (curry eq? 'symbol) type) data start end
-              (? (lambda (m) (or (eq? m 'racket) (eq? m 'scribble))) mode)
-              offset)
+      [(token lexeme (? (curry eq? 'symbol) type) data start end mode offset)
        (define pos (if old-intervals
                        (+ start (or offset 0))
                        start))
