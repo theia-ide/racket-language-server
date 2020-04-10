@@ -183,7 +183,8 @@ ELECTRON
     (match mode
       [(? procedure?) mode]
       [(? pair?) (car mode)]
-      ['no-lang-line 'no-lang-line]))
+      ['no-lang-line 'no-lang-line]
+      ['before-lang-line 'before-lang-line]))
   (cond
     [(equal? mode-proc racket-lexer) 'racket]
     [(equal? mode-proc scribble-inside-lexer) 'scribble]

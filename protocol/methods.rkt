@@ -2,6 +2,7 @@
 (require racket/class
          racket/match
          racket/list
+         racket/set
          data/interval-map
          "conversion.rkt"
          "lsp.rkt"
@@ -132,25 +133,27 @@
     params)
   (define doc (send ws request-tokenized uri))
   (define doc-text (document->text% doc))
+  (define after-define? (box #f))
+  (define (definition? str)
+    (cond [(unbox after-define?)
+           (set-box! after-define? #f)
+           #t]
+          [(set-member? '("define" "define-type") str)
+           (set-box! after-define? #t)
+           #f]
+          [else #f]))
   (define filtered-tokens
     (filter
      (lambda (tok)
        (match-define (token lexeme type data start end mode diff) tok)
-       (match type
-         ['constant #t]
-         ['string #t]
-         ['symbol #t]
-         [_ #f]))
+       (and (eq? 'symbol type) (definition? lexeme)))
      (document:tokens doc)))
   (map
    (lambda (tok)
      (match-define (token lexeme type data start end mode diff) tok)
      (SymbolInformation
       #:name lexeme
-      #:kind (match type
-               ['constant SymbolKindConstant]
-               ['string SymbolKindString]
-               ['symbol SymbolKindVariable])
+      #:kind SymbolKindFunction
       #:location
       (Location
        #:uri uri
